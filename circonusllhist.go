@@ -508,6 +508,17 @@ func (h *Histogram) Equals(other *Histogram) bool {
 	return true
 }
 
+func (h *Histogram) CopyAndReset() *Histogram {
+	newhist := &Histogram{
+		allocd: h.allocd,
+		used:   h.used,
+		bvs:    h.bvs,
+	}
+	h.allocd = DEFAULT_HIST_SIZE
+	h.bvs = make([]Bin, DEFAULT_HIST_SIZE)
+	h.used = 0
+	return newhist
+}
 func (h *Histogram) DecStrings() []string {
 	out := make([]string, h.used)
 	for i, bin := range h.bvs[0:h.used] {

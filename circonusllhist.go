@@ -96,7 +96,7 @@ func (hb *Bin) SetFromFloat64(d float64) *Bin {
 	d = d * 10
 	hb.val = int8(sign * int(math.Floor(d+1e-13)))
 	if hb.val == 100 || hb.val == -100 {
-		if hb.exp > -127 {
+		if hb.exp < 127 {
 			hb.val = hb.val / 10
 			hb.exp++
 		} else {

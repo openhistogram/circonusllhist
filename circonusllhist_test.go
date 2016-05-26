@@ -159,6 +159,21 @@ func BenchmarkNew(b *testing.B) {
 	}
 }
 
+func TestConcurrent(t *testing.T) {
+	h := hist.New()
+	for r := 0; r < 100; r++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				for i := 50; i < 100; i++ {
+					if err := h.RecordValue(float64(i)); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}()
+	}
+}
+
 func TestEquals(t *testing.T) {
 	h1 := hist.New()
 	for i := 0; i < 1000000; i++ {

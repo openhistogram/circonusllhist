@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 )
 
 const (
@@ -233,6 +234,7 @@ func (h1 *Bin) Compare(h2 *Bin) int {
 // This histogram structure tracks values are two decimal digits of precision
 // with a bounded error that remains bounded upon composition
 type Histogram struct {
+	mutex  sync.Mutex
 	bvs    []Bin
 	used   int16
 	allocd int16
@@ -264,7 +266,9 @@ func (h *Histogram) Mean() float64 {
 
 // Reset forgets all bins in the histogram (they remain allocated)
 func (h *Histogram) Reset() {
+	h.mutex.Lock()
 	h.used = 0
+	h.mutex.Unlock()
 }
 
 // RecordValue records the given value, returning an error if the value is out
@@ -335,6 +339,8 @@ func (h *Histogram) InternalFind(hb *Bin) (bool, int16) {
 }
 
 func (h *Histogram) InsertBin(hb *Bin, count int64) uint64 {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	if count == 0 {
 		return 0
 	}
@@ -383,6 +389,8 @@ func (h *Histogram) RecordValues(v float64, n int64) error {
 
 // Approximate mean
 func (h *Histogram) ApproxMean() float64 {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	divisor := 0.0
 	sum := 0.0
 	for i := int16(0); i < h.used; i++ {
@@ -399,6 +407,8 @@ func (h *Histogram) ApproxMean() float64 {
 
 // Approximate sum
 func (h *Histogram) ApproxSum() float64 {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	sum := 0.0
 	for i := int16(0); i < h.used; i++ {
 		midpoint := h.bvs[i].Midpoint()
@@ -409,6 +419,8 @@ func (h *Histogram) ApproxSum() float64 {
 }
 
 func (h *Histogram) ApproxQuantile(q_in []float64) ([]float64, error) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	q_out := make([]float64, len(q_in))
 	i_q, i_b := 0, int16(0)
 	total_cnt, bin_width, bin_left, lower_cnt, upper_cnt := 0.0, 0.0, 0.0, 0.0, 0.0
@@ -473,6 +485,8 @@ func (h *Histogram) ApproxQuantile(q_in []float64) ([]float64, error) {
 
 // ValueAtQuantile returns the recorded value at the given quantile (0..1).
 func (h *Histogram) ValueAtQuantile(q float64) float64 {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	q_in := make([]float64, 1)
 	q_in[0] = q
 	q_out, err := h.ApproxQuantile(q_in)
@@ -491,6 +505,10 @@ func (h *Histogram) SignificantFigures() int64 {
 
 // Equals returns true if the two Histograms are equivalent, false if not.
 func (h *Histogram) Equals(other *Histogram) bool {
+	h.mutex.Lock()
+	other.mutex.Lock()
+	defer h.mutex.Unlock()
+	defer other.mutex.Unlock()
 	switch {
 	case
 		h.used != other.used:
@@ -509,6 +527,8 @@ func (h *Histogram) Equals(other *Histogram) bool {
 }
 
 func (h *Histogram) CopyAndReset() *Histogram {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	newhist := &Histogram{
 		allocd: h.allocd,
 		used:   h.used,
@@ -520,6 +540,8 @@ func (h *Histogram) CopyAndReset() *Histogram {
 	return newhist
 }
 func (h *Histogram) DecStrings() []string {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	out := make([]string, h.used)
 	for i, bin := range h.bvs[0:h.used] {
 		var buffer bytes.Buffer

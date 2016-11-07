@@ -82,7 +82,7 @@ func TestDecStrings(t *testing.T) {
 		"H[4.3e-01]=1"}
 	for i, str := range expect {
 		if str != out[i] {
-			t.Errorf(" DecStrign '%v' != '%v'", out[i], str)
+			t.Errorf(" DecString '%v' != '%v'", out[i], str)
 		}
 	}
 }

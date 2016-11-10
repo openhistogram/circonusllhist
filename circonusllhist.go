@@ -325,8 +325,8 @@ func (h *Histogram) InternalFind(hb *Bin) (bool, uint16) {
 	}
 	rv := -1
 	idx := uint16(0)
-	l := uint16(0)
-	r := h.used - 1
+	l := int(0)
+	r := int(h.used - 1)
 	for l < r {
 		check := (r + l) / 2
 		rv = h.bvs[check].Compare(hb)
@@ -342,7 +342,7 @@ func (h *Histogram) InternalFind(hb *Bin) (bool, uint16) {
 	if rv != 0 {
 		rv = h.bvs[l].Compare(hb)
 	}
-	idx = l
+	idx = uint16(l)
 	if rv == 0 {
 		return true, idx
 	}

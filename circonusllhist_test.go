@@ -2,7 +2,9 @@ package circonusllhist_test
 
 import (
 	"math"
+	"math/rand"
 	"testing"
+	"time"
 
 	hist "github.com/circonus-labs/circonusllhist"
 )
@@ -174,6 +176,14 @@ func TestConcurrent(t *testing.T) {
 	}
 }
 
+func TestRang(t *testing.T) {
+	h1 := hist.New()
+	src := rand.NewSource(time.Now().UnixNano())
+	rnd := rand.New(src)
+	for i := 0; i < 1000000; i++ {
+		h1.RecordValue(rnd.Float64()*10)
+	}
+}
 func TestEquals(t *testing.T) {
 	h1 := hist.New()
 	for i := 0; i < 1000000; i++ {

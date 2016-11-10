@@ -84,8 +84,47 @@ func TestDecStrings(t *testing.T) {
 		"H[4.3e-01]=1"}
 	for i, str := range expect {
 		if str != out[i] {
-			t.Errorf(" DecString '%v' != '%v'", out[i], str)
+			t.Errorf("DecString '%v' != '%v'", out[i], str)
 		}
+	}
+}
+
+func TestStringsToBin(t *testing.T) {
+
+	strings := []string{"H[0.0e+00]=1", "H[1.2e-01]=2", "H[1.3e-01]=1",
+		"H[2.2e-01]=1", "H[3.2e-01]=1", "H[4.1e-01]=2", "H[4.3e-01]=1",
+		"H[9.9e+127]=4294967296", "H[-0.1e-128]=4294967296"}
+
+	bins, err := hist.StringsToBin(strings)
+
+	if err != nil {
+		t.Errorf("Error in StringsToBin '%v'", err)
+	}
+
+	testbins := []hist.Bin{
+		*hist.NewBinRaw(0, 0, 1), *hist.NewBinRaw(12, -1, 2),
+		*hist.NewBinRaw(13, -1, 1), *hist.NewBinRaw(22, -1, 1),
+		*hist.NewBinRaw(32, -1, 1), *hist.NewBinRaw(41, -1, 2),
+		*hist.NewBinRaw(43, -1, 1), *hist.NewBinRaw(99, 127, 4294967296),
+		*hist.NewBinRaw(-1, -128, 4294967296)}
+
+	for i, bin := range bins {
+		if bin.Val() != testbins[i].Val() {
+			t.Errorf("bin val '%v' does not match test val '%v'", bin.Val(), testbins[i].Val())
+		}
+		if bin.Exp() != testbins[i].Exp() {
+			t.Errorf("bin exp '%v' does not match test exp '%v'", bin.Exp(), testbins[i].Exp())
+		}
+		if bin.Count() != testbins[i].Count() {
+			t.Errorf("bin count '%v' does not match test count '%v'", bin.Count(), testbins[i].Count())
+		}
+	}
+
+	// test that we can create a histogram from multiples of bins
+	h := hist.NewFromBins(append(bins, bins...), false)
+	var min = h.Min()
+	if min != 0 {
+		t.Errorf("incorrect min value '%v'", min)
 	}
 }
 
@@ -181,7 +220,7 @@ func TestRang(t *testing.T) {
 	src := rand.NewSource(time.Now().UnixNano())
 	rnd := rand.New(src)
 	for i := 0; i < 1000000; i++ {
-		h1.RecordValue(rnd.Float64()*10)
+		h1.RecordValue(rnd.Float64() * 10)
 	}
 }
 func TestEquals(t *testing.T) {

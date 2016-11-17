@@ -245,8 +245,19 @@ func NewNoLocks() *Histogram {
 	}
 }
 
+// NewFromStrings returns a Histogram created from DecStrings strings
+func NewFromStrings(strs []string, locks bool) (*Histogram, error) {
+
+	bin, err := stringsToBin(strs)
+	if err != nil {
+		return nil, err
+	}
+
+	return newFromBins(bin, locks), nil
+}
+
 // NewFromBins returns a Histogram created from a bins struct slice
-func NewFromBins(bins []Bin, locks bool) *Histogram {
+func newFromBins(bins []Bin, locks bool) *Histogram {
 	return &Histogram{
 		allocd:   uint16(len(bins) + 10), // pad it with 10
 		used:     uint16(len(bins)),
@@ -644,7 +655,7 @@ func (h *Histogram) DecStrings() []string {
 }
 
 // takes the output of DecStrings and deserializes it into a Bin struct slice
-func StringsToBin(strs []string) ([]Bin, error) {
+func stringsToBin(strs []string) ([]Bin, error) {
 
 	bins := make([]Bin, len(strs))
 	for i, str := range strs {

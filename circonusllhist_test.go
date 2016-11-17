@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	hist "github.com/circonus-labs/circonusllhist"
+	hist "github.com/redhotpenguin/circonusllhist"
 )
 
 func helpTestBin(t *testing.T, v float64, val, exp int8) {
@@ -89,42 +89,30 @@ func TestDecStrings(t *testing.T) {
 	}
 }
 
-func TestStringsToBin(t *testing.T) {
-
+func TestNewFromStrings(t *testing.T) {
 	strings := []string{"H[0.0e+00]=1", "H[1.2e-01]=2", "H[1.3e-01]=1",
-		"H[2.2e-01]=1", "H[3.2e-01]=1", "H[4.1e-01]=2", "H[4.3e-01]=1",
-		"H[9.9e+127]=4294967296", "H[-0.1e-128]=4294967296"}
+		"H[2.2e-01]=1", "H[3.2e-01]=1", "H[4.1e-01]=2", "H[4.3e-01]=1"}
 
-	bins, err := hist.StringsToBin(strings)
-
+	// hist of single set of strings
+	singleHist, err := hist.NewFromStrings(strings, false)
 	if err != nil {
-		t.Errorf("Error in StringsToBin '%v'", err)
+		t.Error("error creating hist from strings '%v'", err)
 	}
 
-	testbins := []hist.Bin{
-		*hist.NewBinRaw(0, 0, 1), *hist.NewBinRaw(12, -1, 2),
-		*hist.NewBinRaw(13, -1, 1), *hist.NewBinRaw(22, -1, 1),
-		*hist.NewBinRaw(32, -1, 1), *hist.NewBinRaw(41, -1, 2),
-		*hist.NewBinRaw(43, -1, 1), *hist.NewBinRaw(99, 127, 4294967296),
-		*hist.NewBinRaw(-1, -128, 4294967296)}
-
-	for i, bin := range bins {
-		if bin.Val() != testbins[i].Val() {
-			t.Errorf("bin val '%v' does not match test val '%v'", bin.Val(), testbins[i].Val())
-		}
-		if bin.Exp() != testbins[i].Exp() {
-			t.Errorf("bin exp '%v' does not match test exp '%v'", bin.Exp(), testbins[i].Exp())
-		}
-		if bin.Count() != testbins[i].Count() {
-			t.Errorf("bin count '%v' does not match test count '%v'", bin.Count(), testbins[i].Count())
-		}
+	// hist of multiple sets of strings
+	strings = append(strings, strings...)
+	doubleHist, err := hist.NewFromStrings(strings, false)
+	if err != nil {
+		t.Error("error creating hist from strings '%v'", err)
 	}
 
-	// test that we can create a histogram from multiples of bins
-	h := hist.NewFromBins(append(bins, bins...), false)
-	var min = h.Min()
-	if min != 0 {
-		t.Errorf("incorrect min value '%v'", min)
+	// sanity check the sums are doubled
+	if singleHist.ApproxSum()*2 != doubleHist.ApproxSum() {
+		t.Error("aggregate histogram approxSum failure")
+	}
+
+	if singleHist.Equals(doubleHist) {
+		t.Error("histograms should not be equal")
 	}
 }
 

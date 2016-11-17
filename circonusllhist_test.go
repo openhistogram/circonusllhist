@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	hist "github.com/redhotpenguin/circonusllhist"
+	hist "github.com/circonus-labs/circonusllhist"
 )
 
 func helpTestBin(t *testing.T, v float64, val, exp int8) {

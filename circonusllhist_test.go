@@ -84,8 +84,35 @@ func TestDecStrings(t *testing.T) {
 		"H[4.3e-01]=1"}
 	for i, str := range expect {
 		if str != out[i] {
-			t.Errorf(" DecString '%v' != '%v'", out[i], str)
+			t.Errorf("DecString '%v' != '%v'", out[i], str)
 		}
+	}
+}
+
+func TestNewFromStrings(t *testing.T) {
+	strings := []string{"H[0.0e+00]=1", "H[1.2e-01]=2", "H[1.3e-01]=1",
+		"H[2.2e-01]=1", "H[3.2e-01]=1", "H[4.1e-01]=2", "H[4.3e-01]=1"}
+
+	// hist of single set of strings
+	singleHist, err := hist.NewFromStrings(strings, false)
+	if err != nil {
+		t.Error("error creating hist from strings '%v'", err)
+	}
+
+	// hist of multiple sets of strings
+	strings = append(strings, strings...)
+	doubleHist, err := hist.NewFromStrings(strings, false)
+	if err != nil {
+		t.Error("error creating hist from strings '%v'", err)
+	}
+
+	// sanity check the sums are doubled
+	if singleHist.ApproxSum()*2 != doubleHist.ApproxSum() {
+		t.Error("aggregate histogram approxSum failure")
+	}
+
+	if singleHist.Equals(doubleHist) {
+		t.Error("histograms should not be equal")
 	}
 }
 
@@ -181,7 +208,7 @@ func TestRang(t *testing.T) {
 	src := rand.NewSource(time.Now().UnixNano())
 	rnd := rand.New(src)
 	for i := 0; i < 1000000; i++ {
-		h1.RecordValue(rnd.Float64()*10)
+		h1.RecordValue(rnd.Float64() * 10)
 	}
 }
 func TestEquals(t *testing.T) {

@@ -146,6 +146,10 @@ func TestQuantiles(t *testing.T) {
 	helpQTest(t, []float64{1}, []float64{0, 0.25, 0.5, 1}, []float64{1, 1.025, 1.05, 1.1})
 	helpQTest(t, s1, []float64{0, 0.95, 0.99, 1.0}, []float64{0, 0.4355, 0.4391, 0.44})
 	helpQTest(t, []float64{1.0, 2.0}, []float64{0.5}, []float64{1.1})
+	helpQTest(t, []float64{1.0, 1e200}, []float64{0, 1}, []float64{1.0, 1.1})
+	helpQTest(t, []float64{1e200, 1e200, 1e200, 0, 0, 1e-20, 1e-20, 1e-20, 1e-10}, []float64{0, 1},
+		[]float64{0, 1.1e-10})
+	helpQTest(t, []float64{0, 1}, []float64{0, 0.1}, []float64{0, 0})
 }
 
 func BenchmarkHistogramRecordValue(b *testing.B) {

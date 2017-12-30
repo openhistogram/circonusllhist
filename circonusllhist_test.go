@@ -15,6 +15,7 @@ func helpTestBin(t *testing.T, v float64, val, exp int8) {
 		t.Errorf("%v -> [%v,%v] expected, but got [%v,%v]", v, val, exp, b.Val(), b.Exp())
 	}
 }
+
 func fuzzy_equals(expected, actual float64) bool {
 	delta := math.Abs(expected / 100000.0)
 	if actual >= expected-delta && actual <= expected+delta {
@@ -22,6 +23,7 @@ func fuzzy_equals(expected, actual float64) bool {
 	}
 	return false
 }
+
 func TestBins(t *testing.T) {
 	helpTestBin(t, 0.0, 0, 0)
 	helpTestBin(t, 9.9999e-129, 0, 0)
@@ -57,6 +59,7 @@ func helpTestVB(t *testing.T, v, b, w float64) {
 		t.Errorf("%v -> [%v] != [%v]\n", v, interval, w)
 	}
 }
+
 func TestBinSizes(t *testing.T) {
 	helpTestVB(t, 43.3, 43.0, 1.0)
 	helpTestVB(t, 99.9, 99.0, 1.0)
@@ -142,6 +145,7 @@ func helpQTest(t *testing.T, vals, qin, qexpect []float64) {
 		}
 	}
 }
+
 func TestQuantiles(t *testing.T) {
 	helpQTest(t, []float64{1}, []float64{0, 0.25, 0.5, 1}, []float64{1, 1.025, 1.05, 1.1})
 	helpQTest(t, s1, []float64{0, 0.95, 0.99, 1.0}, []float64{0, 0.4355, 0.4391, 0.44})
@@ -215,6 +219,7 @@ func TestRang(t *testing.T) {
 		h1.RecordValue(rnd.Float64() * 10)
 	}
 }
+
 func TestEquals(t *testing.T) {
 	h1 := hist.New()
 	for i := 0; i < 1000000; i++ {

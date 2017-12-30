@@ -235,7 +235,7 @@ type Histogram struct {
 
 	lookup [256][]uint16
 
-	mutex    sync.Mutex
+	mutex    sync.RWMutex
 	useLocks bool
 }
 
@@ -481,8 +481,8 @@ func (h *Histogram) RecordValues(v float64, n int64) error {
 // Approximate mean
 func (h *Histogram) ApproxMean() float64 {
 	if h.useLocks {
-		h.mutex.Lock()
-		defer h.mutex.Unlock()
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
 	}
 	divisor := 0.0
 	sum := 0.0
@@ -501,8 +501,8 @@ func (h *Histogram) ApproxMean() float64 {
 // Approximate sum
 func (h *Histogram) ApproxSum() float64 {
 	if h.useLocks {
-		h.mutex.Lock()
-		defer h.mutex.Unlock()
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
 	}
 	sum := 0.0
 	for i := uint16(0); i < h.used; i++ {
@@ -515,8 +515,8 @@ func (h *Histogram) ApproxSum() float64 {
 
 func (h *Histogram) ApproxQuantile(q_in []float64) ([]float64, error) {
 	if h.useLocks {
-		h.mutex.Lock()
-		defer h.mutex.Unlock()
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
 	}
 	q_out := make([]float64, len(q_in))
 	i_q, i_b := 0, uint16(0)
@@ -583,8 +583,8 @@ func (h *Histogram) ApproxQuantile(q_in []float64) ([]float64, error) {
 // ValueAtQuantile returns the recorded value at the given quantile (0..1).
 func (h *Histogram) ValueAtQuantile(q float64) float64 {
 	if h.useLocks {
-		h.mutex.Lock()
-		defer h.mutex.Unlock()
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
 	}
 	q_in := make([]float64, 1)
 	q_in[0] = q
@@ -605,12 +605,12 @@ func (h *Histogram) SignificantFigures() int64 {
 // Equals returns true if the two Histograms are equivalent, false if not.
 func (h *Histogram) Equals(other *Histogram) bool {
 	if h.useLocks {
-		h.mutex.Lock()
-		defer h.mutex.Unlock()
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
 	}
 	if other.useLocks {
-		other.mutex.Lock()
-		defer other.mutex.Unlock()
+		other.mutex.RLock()
+		defer other.mutex.RUnlock()
 	}
 	switch {
 	case

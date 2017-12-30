@@ -96,14 +96,14 @@ func TestNewFromStrings(t *testing.T) {
 	// hist of single set of strings
 	singleHist, err := hist.NewFromStrings(strings, false)
 	if err != nil {
-		t.Error("error creating hist from strings '%v'", err)
+		t.Errorf("error creating hist from strings '%v'", err)
 	}
 
 	// hist of multiple sets of strings
 	strings = append(strings, strings...)
 	doubleHist, err := hist.NewFromStrings(strings, false)
 	if err != nil {
-		t.Error("error creating hist from strings '%v'", err)
+		t.Errorf("error creating hist from strings '%v'", err)
 	}
 
 	// sanity check the sums are doubled

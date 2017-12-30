@@ -246,3 +246,36 @@ func TestEquals(t *testing.T) {
 		t.Error("Expected Histograms to be equivalent")
 	}
 }
+
+func TestMinMaxMean(t *testing.T) {
+	const (
+		minVal = 0
+		maxVal = 1000000
+	)
+
+	h := hist.New()
+	for i := minVal; i < maxVal; i++ {
+		if err := h.RecordValue(float64(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if h.Min() > minVal {
+		t.Error("incorrect min value")
+	}
+
+	if h.Max() < maxVal {
+		t.Error("incorrect max value")
+	}
+
+	round := func(val float64) int {
+		if val < 0 {
+			return int(val - 0.5)
+		}
+		return int(val + 0.5)
+	}
+
+	if round(h.Mean()) != round(maxVal/2) {
+		t.Errorf("incorrect mean value")
+	}
+}

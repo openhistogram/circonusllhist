@@ -52,16 +52,16 @@ var power_of_ten = [...]float64{
 
 // A Bracket is a part of a cumulative distribution.
 type Bin struct {
+	count uint64
 	val   int8
 	exp   int8
-	count uint64
 }
 
 func NewBinRaw(val int8, exp int8, count uint64) *Bin {
 	return &Bin{
+		count: count,
 		val:   val,
 		exp:   exp,
-		count: count,
 	}
 }
 func NewBin() *Bin {
@@ -212,14 +212,14 @@ func (h1 *Bin) Compare(h2 *Bin) int {
 	//       then add or subtract val accordingly
 
 	if h1.val >= 0 {
-		v1 = ((int(h1.exp)+256)<<8)*int(((h1.val|(^h1.val+1))>>8)&1) + int(h1.val)
+		v1 = ((int(h1.exp)+256)<<8)*int(((int(h1.val)|(^int(h1.val)+1))>>8)&1) + int(h1.val)
 	} else {
-		v1 = ((int(h1.exp)+256)<<8)*int(((h1.val|(^h1.val+1))>>8)&1) - int(h1.val)
+		v1 = ((int(h1.exp)+256)<<8)*int(((int(h1.val)|(^int(h1.val)+1))>>8)&1) - int(h1.val)
 	}
 	if h2.val >= 0 {
-		v2 = ((int(h2.exp)+256)<<8)*int(((h2.val|(^h2.val+1))>>8)&1) + int(h2.val)
+		v2 = ((int(h2.exp)+256)<<8)*int(((int(h2.val)|(^int(h2.val)+1))>>8)&1) + int(h2.val)
 	} else {
-		v2 = ((int(h2.exp)+256)<<8)*int(((h2.val|(^h2.val+1))>>8)&1) - int(h2.val)
+		v2 = ((int(h2.exp)+256)<<8)*int(((int(h2.val)|(^int(h2.val)+1))>>8)&1) - int(h2.val)
 	}
 
 	// return the difference

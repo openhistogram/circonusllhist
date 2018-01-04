@@ -9,69 +9,12 @@ import (
 	hist "github.com/circonus-labs/circonusllhist"
 )
 
-func helpTestBin(t *testing.T, v float64, val, exp int8) {
-	b := hist.NewBinFromFloat64(v)
-	if b.Val() != val || b.Exp() != exp {
-		t.Errorf("%v -> [%v,%v] expected, but got [%v,%v]", v, val, exp, b.Val(), b.Exp())
-	}
-}
-
 func fuzzy_equals(expected, actual float64) bool {
 	delta := math.Abs(expected / 100000.0)
 	if actual >= expected-delta && actual <= expected+delta {
 		return true
 	}
 	return false
-}
-
-func TestBins(t *testing.T) {
-	helpTestBin(t, 0.0, 0, 0)
-	helpTestBin(t, 9.9999e-129, 0, 0)
-	helpTestBin(t, 1e-128, 10, -128)
-	helpTestBin(t, 1.00001e-128, 10, -128)
-	helpTestBin(t, 1.09999e-128, 10, -128)
-	helpTestBin(t, 1.1e-128, 11, -128)
-	helpTestBin(t, 1e127, 10, 127)
-	helpTestBin(t, 9.999e127, 99, 127)
-	helpTestBin(t, 1e128, -1, 0)
-	helpTestBin(t, -9.9999e-129, 0, 0)
-	helpTestBin(t, -1e-128, -10, -128)
-	helpTestBin(t, -1.00001e-128, -10, -128)
-	helpTestBin(t, -1.09999e-128, -10, -128)
-	helpTestBin(t, -1.1e-128, -11, -128)
-	helpTestBin(t, -1e127, -10, 127)
-	helpTestBin(t, -9.999e127, -99, 127)
-	helpTestBin(t, -1e128, -1, 0)
-	helpTestBin(t, 9.999e127, 99, 127)
-}
-
-func helpTestVB(t *testing.T, v, b, w float64) {
-	bin := hist.NewBinFromFloat64(v)
-	out := bin.Value()
-	interval := bin.BinWidth()
-	if out < 0 {
-		interval *= -1.0
-	}
-	if !fuzzy_equals(b, out) {
-		t.Errorf("%v -> %v != %v\n", v, out, b)
-	}
-	if !fuzzy_equals(w, interval) {
-		t.Errorf("%v -> [%v] != [%v]\n", v, interval, w)
-	}
-}
-
-func TestBinSizes(t *testing.T) {
-	helpTestVB(t, 43.3, 43.0, 1.0)
-	helpTestVB(t, 99.9, 99.0, 1.0)
-	helpTestVB(t, 10.0, 10.0, 1.0)
-	helpTestVB(t, 1.0, 1.0, 0.1)
-	helpTestVB(t, 0.0002, 0.0002, 0.00001)
-	helpTestVB(t, 0.003, 0.003, 0.0001)
-	helpTestVB(t, 0.3201, 0.32, 0.01)
-	helpTestVB(t, 0.0035, 0.0035, 0.0001)
-	helpTestVB(t, -1.0, -1.0, -0.1)
-	helpTestVB(t, -0.00123, -0.0012, -0.0001)
-	helpTestVB(t, -987324, -980000, -10000)
 }
 
 var s1 = []float64{0.123, 0, 0.43, 0.41, 0.415, 0.2201, 0.3201, 0.125, 0.13}
@@ -194,6 +137,10 @@ func BenchmarkNew(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		hist.New()
 	}
+}
+
+func TestCompare(t *testing.T) {
+	// var h1, h2 *Bin
 }
 
 func TestConcurrent(t *testing.T) {

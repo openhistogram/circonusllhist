@@ -15,6 +15,7 @@ func helpTestBin(t *testing.T, v float64, val, exp int8) {
 		t.Errorf("%v -> [%v,%v] expected, but got [%v,%v]", v, val, exp, b.Val(), b.Exp())
 	}
 }
+
 func fuzzy_equals(expected, actual float64) bool {
 	delta := math.Abs(expected / 100000.0)
 	if actual >= expected-delta && actual <= expected+delta {
@@ -22,6 +23,7 @@ func fuzzy_equals(expected, actual float64) bool {
 	}
 	return false
 }
+
 func TestBins(t *testing.T) {
 	helpTestBin(t, 0.0, 0, 0)
 	helpTestBin(t, 9.9999e-129, 0, 0)
@@ -57,6 +59,7 @@ func helpTestVB(t *testing.T, v, b, w float64) {
 		t.Errorf("%v -> [%v] != [%v]\n", v, interval, w)
 	}
 }
+
 func TestBinSizes(t *testing.T) {
 	helpTestVB(t, 43.3, 43.0, 1.0)
 	helpTestVB(t, 99.9, 99.0, 1.0)
@@ -96,14 +99,14 @@ func TestNewFromStrings(t *testing.T) {
 	// hist of single set of strings
 	singleHist, err := hist.NewFromStrings(strings, false)
 	if err != nil {
-		t.Error("error creating hist from strings '%v'", err)
+		t.Errorf("error creating hist from strings '%v'", err)
 	}
 
 	// hist of multiple sets of strings
 	strings = append(strings, strings...)
 	doubleHist, err := hist.NewFromStrings(strings, false)
 	if err != nil {
-		t.Error("error creating hist from strings '%v'", err)
+		t.Errorf("error creating hist from strings '%v'", err)
 	}
 
 	// sanity check the sums are doubled
@@ -142,6 +145,7 @@ func helpQTest(t *testing.T, vals, qin, qexpect []float64) {
 		}
 	}
 }
+
 func TestQuantiles(t *testing.T) {
 	helpQTest(t, []float64{1}, []float64{0, 0.25, 0.5, 1}, []float64{1, 1.025, 1.05, 1.1})
 	helpQTest(t, s1, []float64{0, 0.95, 0.99, 1.0}, []float64{0, 0.4355, 0.4391, 0.44})
@@ -215,6 +219,7 @@ func TestRang(t *testing.T) {
 		h1.RecordValue(rnd.Float64() * 10)
 	}
 }
+
 func TestEquals(t *testing.T) {
 	h1 := hist.New()
 	for i := 0; i < 1000000; i++ {
@@ -239,5 +244,38 @@ func TestEquals(t *testing.T) {
 
 	if !h1.Equals(h2) {
 		t.Error("Expected Histograms to be equivalent")
+	}
+}
+
+func TestMinMaxMean(t *testing.T) {
+	const (
+		minVal = 0
+		maxVal = 1000000
+	)
+
+	h := hist.New()
+	for i := minVal; i < maxVal; i++ {
+		if err := h.RecordValue(float64(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if h.Min() > minVal {
+		t.Error("incorrect min value")
+	}
+
+	if h.Max() < maxVal {
+		t.Error("incorrect max value")
+	}
+
+	round := func(val float64) int {
+		if val < 0 {
+			return int(val - 0.5)
+		}
+		return int(val + 0.5)
+	}
+
+	if round(h.Mean()) != round(maxVal/2) {
+		t.Errorf("incorrect mean value")
 	}
 }

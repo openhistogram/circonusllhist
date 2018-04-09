@@ -8,8 +8,10 @@ package circonusllhist
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -236,6 +238,90 @@ type Histogram struct {
 
 	mutex    sync.RWMutex
 	useLocks bool
+}
+
+var bvl_limits = []uint64{
+	0x00000000000000ff, 0x0000000000000ffff,
+	0x0000000000ffffff, 0x00000000fffffffff,
+	0x000000ffffffffff, 0x0000fffffffffffff,
+	0x00ffffffffffffff,
+}
+
+const (
+	BVL1 = 0
+	BVL2 = 1
+	BVL3 = 2
+	BVL4 = 3
+	BVL5 = 4
+	BVL6 = 5
+	BVL7 = 6
+	BVL8 = 7
+)
+
+func (h *Histogram) bvWrite(idx int) []uint8 {
+	var tgtType = BVL8
+	for i := 0; i < BVL8; i++ {
+		if h.bvs[idx].count <= bvl_limits[i] {
+			tgtType = i
+			break
+		}
+	}
+	var result = make([]uint8, 3+tgtType+1)
+	result[0] = uint8(h.bvs[idx].val)
+	result[1] = uint8(h.bvs[idx].exp)
+	result[2] = uint8(tgtType)
+	for i := tgtType; i >= 0; i-- {
+		var count = uint8(h.bvs[idx].count)
+		result[i+3] = ((count >> (uint8(i) * 8)) & 0xff)
+	}
+
+	return result
+}
+
+func htons(b *[]byte, i, v uint8) {
+	(*b)[i] = byte(0xff & (v >> 8))
+	(*b)[i+1] = byte((0xff & (v)))
+}
+
+func (h *Histogram) SerializeRaw(w io.Writer) error {
+	var (
+		parts  = make([][]uint8, len(h.bvs))
+		length = 2
+	)
+	for i := 0; i < len(h.bvs); i++ {
+		part := h.bvWrite(i)
+		length += len(part)
+		parts = append(parts, part)
+	}
+	var (
+		buf    = make([]byte, length)
+		offset = 2
+	)
+
+	htons(&buf, 0, uint8(len(h.bvs)))
+	for i := 0; i < len(parts); i++ {
+		for j := 0; j < len(parts[i]); j++ {
+			buf[offset] = byte(parts[i][j])
+			offset++
+		}
+	}
+	// write buf as bytes to w...
+	if _, err := w.Write([]byte(buf)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *Histogram) SerializeB64(w io.Writer) error {
+	buf := bytes.NewBuffer([]byte{})
+	h.SerializeRaw(buf)
+
+	encoder := base64.NewEncoder(base64.StdEncoding, w)
+	if _, err := encoder.Write(buf.Bytes()); err != nil {
+		return err
+	}
+	encoder.Close()
+	return nil
 }
 
 // New returns a new Histogram

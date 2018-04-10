@@ -329,7 +329,7 @@ func readBin(in io.Reader) (out bin, err error) {
 		return
 	}
 	if bvl > uint8(BVL8) {
-		return
+		return out, errors.New("encoding error: bvl value is greater than max allowable")
 	}
 
 	bcount := make([]byte, 8)
@@ -362,10 +362,10 @@ func Deserialize(in io.Reader) (h *Histogram, err error) {
 
 	for ii := int16(0); ii < nbin; ii++ {
 		bb, err := readBin(in)
-		h.insertBin(&bb, int64(bb.count))
 		if err != nil {
 			return h, err
 		}
+		h.insertBin(&bb, int64(bb.count))
 	}
 	return h, nil
 }

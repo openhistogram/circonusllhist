@@ -17,7 +17,9 @@ func TestSerialize(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer([]byte{})
-	h.Serialize(buf)
+	if err := h.Serialize(buf); err != nil {
+		t.Error(err)
+	}
 
 	h2, err := Deserialize(buf)
 	if err != nil {

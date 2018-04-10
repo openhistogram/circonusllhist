@@ -9,11 +9,11 @@ package circonusllhist
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"strconv"
 	"strings"
@@ -242,133 +242,136 @@ type Histogram struct {
 	useLocks bool
 }
 
-var bvl_limits = []uint64{
-	0x00000000000000ff, 0x0000000000000ffff,
-	0x0000000000ffffff, 0x00000000fffffffff,
-	0x000000ffffffffff, 0x0000fffffffffffff,
-	0x00ffffffffffffff,
-}
-
 const (
-	BVL1 = 0
-	BVL2 = 1
-	BVL3 = 2
-	BVL4 = 3
-	BVL5 = 4
-	BVL6 = 5
-	BVL7 = 6
-	BVL8 = 7
+	BVL1, BVL1MASK uint64 = iota, 0xff << (8 * iota)
+	BVL2, BVL2MASK
+	BVL3, BVL3MASK
+	BVL4, BVL4MASK
+	BVL5, BVL5MASK
+	BVL6, BVL6MASK
+	BVL7, BVL7MASK
+	BVL8, BVL8MASK
 )
 
-func (h *Histogram) bvRead(buf []byte, offset int) (uint8, error) {
-	var count uint8 = 0
-
-	if h.bvs == nil {
-		h.bvs = make([]bin, defaultHistSize)
-	}
-
-	if len(buf) < 3 {
-		return 0, errors.New("buf length must be greater than 3")
-	}
-	var tgtType = buf[offset+2]
-
-	if tgtType > BVL8 {
-		return 0, errors.New("value in buf is greater than BVL8")
-	}
-
-	if len(buf) < int(3+tgtType+1) {
-		return 0, errors.New("buf is not long enough to deserialize")
-	}
-
-	var bucket = bin{
-		val: int8(buf[offset+0]),
-		exp: int8(buf[offset+1])}
-
-	for i := int(tgtType); i >= 0; i-- {
-		count |= buf[int(offset)+int(i)+3] << (uint8(i) * 8)
-	}
-	bucket.count = uint64(count)
-
-	h.insertBin(&bucket, int64(count))
-
-	return uint8(offset) + 3 + uint8(tgtType) + 1, nil
-}
-
-func (h *Histogram) bvWrite(idx int) []uint8 {
-	var tgtType = BVL8
-	for i := 0; i < BVL8; i++ {
-		if h.bvs[idx].count <= bvl_limits[i] {
-			tgtType = i
-			break
+func getBytesRequired(val uint64) (len int8) {
+	if 0 != (BVL8MASK|BVL7MASK|BVL6MASK|BVL5MASK)&val {
+		if 0 != BVL8MASK&val {
+			return int8(BVL8)
+		}
+		if 0 != BVL7MASK&val {
+			return int8(BVL7)
+		}
+		if 0 != BVL6MASK&val {
+			return int8(BVL6)
+		}
+		if 0 != BVL5MASK&val {
+			return int8(BVL5)
+		}
+	} else {
+		if 0 != BVL4MASK&val {
+			return int8(BVL4)
+		}
+		if 0 != BVL3MASK&val {
+			return int8(BVL3)
+		}
+		if 0 != BVL2MASK&val {
+			return int8(BVL2)
 		}
 	}
-	var result = make([]uint8, 3+tgtType+1)
-	result[0] = uint8(h.bvs[idx].val)
-	result[1] = uint8(h.bvs[idx].exp)
-	result[2] = uint8(tgtType)
-	for i := tgtType; i >= 0; i-- {
-		var count = uint8(h.bvs[idx].count)
-		result[i+3] = ((count >> (uint8(i) * 8)) & 0xff)
-	}
-
-	return result
+	return int8(BVL1)
 }
 
-func htons(b *[]byte, i, v uint8) {
-	(*b)[i] = byte(0xff & (v >> 8))
-	(*b)[i+1] = byte((0xff & (v)))
-}
-
-func ntohs(b *[]byte, i uint8) uint8 {
-	return ((0xff & (*b)[i]) << 8) |
-		(0xff & (*b)[i+1])
-}
-
-func Deserialize(r io.Reader) (*Histogram, error) {
-	var (
-		offset   uint8 = 2
-		h              = New()
-		buf, err       = ioutil.ReadAll(r)
-	)
+func writeBin(out io.Writer, in bin, idx int) (err error) {
+	err = binary.Write(out, binary.BigEndian, in.val)
 	if err != nil {
-		return h, err
+		return
 	}
 
-	for i := ntohs(&buf, 0); i > 0; i-- {
-		offset, err = h.bvRead(buf, int(offset))
+	err = binary.Write(out, binary.BigEndian, in.exp)
+	if err != nil {
+		return
+	}
+
+	var tgtType int8 = getBytesRequired(in.count)
+
+	err = binary.Write(out, binary.BigEndian, tgtType)
+	if err != nil {
+		return
+	}
+
+	var b = []uint64{}
+	for i := int(tgtType); i >= 0; i-- {
+		b = append([]uint64{(uint64(in.count>>(uint8(i)*8)) & 0xff)}, b...)
+	}
+	err = binary.Write(out, binary.BigEndian, b)
+
+	if err != nil {
+		return
+	}
+	return
+}
+
+func readBin(in io.Reader) (out bin, err error) {
+	err = binary.Read(in, binary.BigEndian, &out.val)
+	if err != nil {
+		return
+	}
+
+	err = binary.Read(in, binary.BigEndian, &out.exp)
+	if err != nil {
+		return
+	}
+	var bvl uint8
+	err = binary.Read(in, binary.BigEndian, &bvl)
+	if err != nil {
+		return
+	}
+	if bvl > uint8(BVL8) {
+		return
+	}
+
+	bcount := make([]byte, 8)
+	err = binary.Read(in, binary.BigEndian, bcount)
+	if err != nil {
+		return
+	}
+	out.count = binary.BigEndian.Uint64(bcount)
+	return
+}
+
+func Deserialize(in io.Reader) (h *Histogram, err error) {
+	h = New()
+	if h.bvs == nil {
+		h.bvs = make([]bin, 0, defaultHistSize)
+	}
+
+	var nbin int16
+	err = binary.Read(in, binary.BigEndian, &nbin)
+	if err != nil {
+		return
+	}
+
+	for ii := int16(0); ii < nbin; ii++ {
+		bb, err := readBin(in)
+		h.insertBin(&bb, int64(bb.count))
 		if err != nil {
-			h.bvs = []bin{}
 			return h, err
 		}
 	}
-	return h, err
+	return h, nil
 }
 
 func (h *Histogram) Serialize(w io.Writer) error {
-	var (
-		parts  = make([][]uint8, len(h.bvs))
-		length = 2
-	)
-	for i := 0; i < len(h.bvs); i++ {
-		part := h.bvWrite(i)
-		length += len(part)
-		parts = append(parts, part)
-	}
-	var (
-		buf    = make([]byte, length)
-		offset = 2
-	)
 
-	htons(&buf, 0, uint8(len(h.bvs)))
-	for i := 0; i < len(parts); i++ {
-		for j := 0; j < len(parts[i]); j++ {
-			buf[offset] = byte(parts[i][j])
-			offset++
-		}
-	}
-	// write buf as bytes to w...
-	if _, err := w.Write([]byte(buf)); err != nil {
+	var nbin int16 = int16(len(h.bvs))
+	if err := binary.Write(w, binary.BigEndian, nbin); err != nil {
 		return err
+	}
+
+	for i := 0; i < len(h.bvs); i++ {
+		if err := writeBin(w, h.bvs[i], i); err != nil {
+			return err
+		}
 	}
 	return nil
 }

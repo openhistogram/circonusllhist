@@ -1,9 +1,36 @@
 package circonusllhist
 
 import (
+	"bytes"
 	"math"
 	"testing"
 )
+
+func TestSerialize(t *testing.T) {
+	h, err := NewFromStrings([]string{
+		"H[0.0e+00]=1",
+		"H[1.0e+01]=1",
+		"H[2.0e+02]=1",
+	}, false)
+	if err != nil {
+		t.Error("could not read from strings for test")
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	if err := h.Serialize(buf); err != nil {
+		t.Error(err)
+	}
+
+	h2, err := Deserialize(buf)
+	if err != nil {
+		t.Error(h2, err)
+	}
+	if !h.Equals(h2) {
+		t.Log(h.DecStrings())
+		t.Log(h2.DecStrings())
+		t.Error("histograms do not match")
+	}
+}
 
 func helpTestBin(t *testing.T, v float64, val, exp int8) {
 	b := newBinFromFloat64(v)

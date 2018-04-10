@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"strconv"
 	"strings"
@@ -258,6 +259,40 @@ const (
 	BVL8 = 7
 )
 
+func (h *Histogram) bvRead(buf []byte, offset int) (uint8, error) {
+	var count uint8 = 0
+
+	if h.bvs == nil {
+		h.bvs = make([]bin, defaultHistSize)
+	}
+
+	if len(buf) < 3 {
+		return 0, errors.New("buf length must be greater than 3")
+	}
+	var tgtType = buf[offset+2]
+
+	if tgtType > BVL8 {
+		return 0, errors.New("value in buf is greater than BVL8")
+	}
+
+	if len(buf) < int(3+tgtType+1) {
+		return 0, errors.New("buf is not long enough to deserialize")
+	}
+
+	var bucket = bin{
+		val: int8(buf[offset+0]),
+		exp: int8(buf[offset+1])}
+
+	for i := int(tgtType); i >= 0; i-- {
+		count |= buf[int(offset)+int(i)+3] << (uint8(i) * 8)
+	}
+	bucket.count = uint64(count)
+
+	h.insertBin(&bucket, int64(count))
+
+	return uint8(offset) + 3 + uint8(tgtType) + 1, nil
+}
+
 func (h *Histogram) bvWrite(idx int) []uint8 {
 	var tgtType = BVL8
 	for i := 0; i < BVL8; i++ {
@@ -281,6 +316,31 @@ func (h *Histogram) bvWrite(idx int) []uint8 {
 func htons(b *[]byte, i, v uint8) {
 	(*b)[i] = byte(0xff & (v >> 8))
 	(*b)[i+1] = byte((0xff & (v)))
+}
+
+func ntohs(b *[]byte, i uint8) uint8 {
+	return ((0xff & (*b)[i]) << 8) |
+		(0xff & (*b)[i+1])
+}
+
+func DeserializeRaw(r io.Reader) (*Histogram, error) {
+	var (
+		offset   uint8 = 2
+		h              = New()
+		buf, err       = ioutil.ReadAll(r)
+	)
+	if err != nil {
+		return h, err
+	}
+
+	for i := ntohs(&buf, 0); i > 0; i-- {
+		offset, err = h.bvRead(buf, int(offset))
+		if err != nil {
+			h.bvs = []bin{}
+			return h, err
+		}
+	}
+	return h, err
 }
 
 func (h *Histogram) SerializeRaw(w io.Writer) error {

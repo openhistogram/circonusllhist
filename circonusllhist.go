@@ -9,6 +9,7 @@ package circonusllhist
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -323,7 +324,7 @@ func ntohs(b *[]byte, i uint8) uint8 {
 		(0xff & (*b)[i+1])
 }
 
-func DeserializeRaw(r io.Reader) (*Histogram, error) {
+func Deserialize(r io.Reader) (*Histogram, error) {
 	var (
 		offset   uint8 = 2
 		h              = New()
@@ -343,7 +344,7 @@ func DeserializeRaw(r io.Reader) (*Histogram, error) {
 	return h, err
 }
 
-func (h *Histogram) SerializeRaw(w io.Writer) error {
+func (h *Histogram) Serialize(w io.Writer) error {
 	var (
 		parts  = make([][]uint8, len(h.bvs))
 		length = 2
@@ -374,7 +375,7 @@ func (h *Histogram) SerializeRaw(w io.Writer) error {
 
 func (h *Histogram) SerializeB64(w io.Writer) error {
 	buf := bytes.NewBuffer([]byte{})
-	h.SerializeRaw(buf)
+	h.Serialize(buf)
 
 	encoder := base64.NewEncoder(base64.StdEncoding, w)
 	if _, err := encoder.Write(buf.Bytes()); err != nil {
@@ -845,4 +846,27 @@ func stringsToBin(strs []string) ([]bin, error) {
 	}
 
 	return bins, nil
+}
+
+// UnmarshalJSON - histogram will come in a base64 encoded serialized form
+func (h *Histogram) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	data, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return err
+	}
+	h, err = Deserialize(bytes.NewBuffer(data))
+	return err
+}
+
+func (h *Histogram) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBuffer([]byte{})
+	err := h.SerializeB64(buf)
+	if err != nil {
+		return buf.Bytes(), err
+	}
+	return json.Marshal(buf.String())
 }

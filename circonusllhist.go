@@ -282,6 +282,7 @@ func getBytesRequired(val uint64) (len int8) {
 }
 
 func writeBin(out io.Writer, in bin, idx int) (err error) {
+
 	err = binary.Write(out, binary.BigEndian, in.val)
 	if err != nil {
 		return
@@ -299,12 +300,13 @@ func writeBin(out io.Writer, in bin, idx int) (err error) {
 		return
 	}
 
-	var b = []uint64{}
-	for i := int(tgtType); i >= 0; i-- {
-		b = append([]uint64{(uint64(in.count>>(uint8(i)*8)) & 0xff)}, b...)
+	var bcount = make([]uint8, 8)
+	b := bcount[0 : tgtType+1]
+	for i := tgtType; i >= 0; i-- {
+		b[i] = uint8(uint64(in.count>>(uint8(i)*8)) & 0xff)
 	}
-	err = binary.Write(out, binary.BigEndian, b)
 
+	err = binary.Write(out, binary.BigEndian, b)
 	if err != nil {
 		return
 	}
@@ -331,11 +333,18 @@ func readBin(in io.Reader) (out bin, err error) {
 	}
 
 	bcount := make([]byte, 8)
-	err = binary.Read(in, binary.BigEndian, bcount)
+	b := bcount[0 : bvl+1]
+	err = binary.Read(in, binary.BigEndian, b)
 	if err != nil {
 		return
 	}
-	out.count = binary.BigEndian.Uint64(bcount)
+
+	var count uint64 = 0
+	for i := int(bvl + 1); i >= 0; i-- {
+		count |= (uint64(bcount[i]) << (uint8(i) * 8))
+	}
+
+	out.count = count
 	return
 }
 

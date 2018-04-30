@@ -609,7 +609,7 @@ func (h *Histogram) RecordIntScales(val, scale int, n int64) error {
 			val *= 10
 			scale -= 1
 		}
-		for val > 100 {
+		for val >= 100 {
 			val /= 10
 			scale++
 		}

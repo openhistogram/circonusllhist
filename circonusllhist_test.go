@@ -49,6 +49,7 @@ func fuzzy_equals(expected, actual float64) bool {
 
 func TestBins(t *testing.T) {
 	helpTestBin(t, 0.0, 0, 0)
+	helpTestBin(t, 100, 10, 2)
 	helpTestBin(t, 9.9999e-129, 0, 0)
 	helpTestBin(t, 1e-128, 10, -128)
 	helpTestBin(t, 1.00001e-128, 10, -128)
@@ -66,6 +67,12 @@ func TestBins(t *testing.T) {
 	helpTestBin(t, -9.999e127, -99, 127)
 	helpTestBin(t, -1e128, -1, 0)
 	helpTestBin(t, 9.999e127, 99, 127)
+
+	h := New()
+	h.RecordIntScale(100, 1)
+	if h.bvs[0].val != 10 || h.bvs[0].exp != 2 {
+		t.Errorf("100 not added correctly")
+	}
 }
 
 func helpTestVB(t *testing.T, v, b, w float64) {

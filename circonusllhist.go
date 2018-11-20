@@ -601,6 +601,7 @@ func (h *Histogram) RecordIntScales(val, scale int, n int64) error {
 	if val == 0 {
 		scale = 0
 	} else {
+		scale++
 		if val < 0 {
 			val = 0 - val
 			sign = -1

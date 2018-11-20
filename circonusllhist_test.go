@@ -2,9 +2,34 @@ package circonusllhist
 
 import (
 	"bytes"
+	"fmt"
 	"math"
+	"math/rand"
 	"testing"
 )
+
+func TestCreate(t *testing.T) {
+	h := New()
+	/*
+		for j := 0; j < 100000; j++ {
+			h.RecordIntScale(rand.Intn(1000), 0)
+		}
+	*/
+	h.RecordIntScales(99, 0, int64(rand.Intn(2))+1)
+	buf := bytes.NewBuffer([]byte{})
+	if err := h.Serialize(buf); err != nil {
+		t.Error(err)
+	}
+	h2, err := Deserialize(buf)
+	if err != nil {
+		t.Error(err)
+	}
+	for j := uint16(0); j < h2.used; j++ {
+		if h2.bvs[j].exp < 1 && (h2.bvs[j].val%10) != 0 {
+			t.Error(fmt.Errorf("bad bin[%v] %ve%v", j, float64(h2.bvs[j].val)/10.0, h2.bvs[j].exp))
+		}
+	}
+}
 
 func TestSerialize(t *testing.T) {
 	h, err := NewFromStrings([]string{
@@ -69,9 +94,15 @@ func TestBins(t *testing.T) {
 	helpTestBin(t, 9.999e127, 99, 127)
 
 	h := New()
-	h.RecordIntScale(100, 1)
+	h.RecordIntScale(100, 0)
 	if h.bvs[0].val != 10 || h.bvs[0].exp != 2 {
 		t.Errorf("100 not added correctly")
+	}
+
+	h = New()
+	h.RecordValue(100.0)
+	if h.bvs[0].val != 10 || h.bvs[0].exp != 2 {
+		t.Errorf("100.0 not added correctly")
 	}
 }
 

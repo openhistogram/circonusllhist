@@ -152,6 +152,7 @@ func TestRecordDuration(t *testing.T) {
 	}
 
 	for n, test := range tests {
+		test := test
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
 			h := New()
 			for _, dur := range test.input {

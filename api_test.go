@@ -118,7 +118,7 @@ func BenchmarkHistogramTypical(b *testing.B) {
 func BenchmarkHistogramRecordIntScale(b *testing.B) {
 	h := hist.NewNoLocks()
 	for i := 0; i < b.N; i++ {
-		h.RecordIntScale(i%90+10, (i/1000)%3)
+		h.RecordIntScale(int64(i%90+10), (i/1000)%3)
 	}
 	b.ReportAllocs()
 }
@@ -126,7 +126,7 @@ func BenchmarkHistogramRecordIntScale(b *testing.B) {
 func BenchmarkHistogramTypicalIntScale(b *testing.B) {
 	h := hist.NewNoLocks()
 	for i := 0; i < b.N; i++ {
-		h.RecordIntScale(i%90+10, (i/1000)%3)
+		h.RecordIntScale(int64(i%90+10), (i/1000)%3)
 	}
 	b.ReportAllocs()
 }

@@ -116,53 +116,46 @@ func TestRecordDuration(t *testing.T) {
 		tolerance  time.Duration
 	}{
 		{
-			input:      []time.Duration{1 * time.Nanosecond},
-			inputUnit:  time.Nanosecond,
-			approxSum:  time.Nanosecond,
-			approxMean: time.Nanosecond,
-			tolerance:  time.Duration(1 * time.Nanosecond),
+			input:      []time.Duration{3 * time.Nanosecond},
+			approxSum:  3 * time.Nanosecond,
+			approxMean: 3 * time.Nanosecond,
 		},
 		{
 			input:      []time.Duration{1000 * time.Second},
-			inputUnit:  time.Nanosecond,
-			approxSum:  time.Nanosecond,
-			approxMean: time.Nanosecond,
-			tolerance:  time.Duration(1 * time.Nanosecond),
+			approxSum:  1000 * time.Second,
+			approxMean: 1000 * time.Second,
 		},
 		{
 			input: []time.Duration{
 				4 * time.Second,
 				8 * time.Second,
 			},
-			inputUnit:  time.Second,
 			approxSum:  12.0 * time.Second,
 			approxMean: 6.0 * time.Second,
-			tolerance:  time.Duration(1 * time.Millisecond),
 		},
 	}
 
-	fuzzyEquals := func(expected, actual, tolerance time.Duration) bool {
+	fuzzyEquals := func(expected, actual time.Duration) bool {
 		diff := math.Abs(float64(expected) - float64(actual))
-		diffNs := time.Duration(diff)
-		if diffNs <= tolerance {
-			return true
+		if (diff / math.Max(float64(expected), float64(actual))) > 0.05 {
+			return false
 		}
-
-		return false
+		return true
 	}
 
 	for n, test := range tests {
+		test := test
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
 			h := New()
 			for _, dur := range test.input {
 				h.RecordDuration(dur)
 			}
 
-			if v := time.Duration(h.ApproxSum()) * test.inputUnit; !fuzzyEquals(v, test.approxSum, test.tolerance) {
-				t.Fatalf("%v approx sum bad: have=%v want=%v", test.input, v, test.approxSum)
+			if v := time.Duration(1000000000.0 * h.ApproxSum()); !fuzzyEquals(v, test.approxSum) {
+				t.Fatalf("%v approx sum bad: have=%v want=%v", test.input, h.ApproxSum(), test.approxSum)
 			}
 
-			if v := time.Duration(h.ApproxMean()) * test.inputUnit; !fuzzyEquals(v, test.approxMean, test.tolerance) {
+			if v := time.Duration(1000000000.0 * h.ApproxMean()); !fuzzyEquals(v, test.approxMean) {
 				t.Fatalf("%v approx mean bad: have=%v want=%v", test.input, v, test.approxMean)
 			}
 		})

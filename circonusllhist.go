@@ -472,7 +472,7 @@ func (h *Histogram) Reset() {
 
 // RecordIntScale records an integer scaler value, returning an error if the
 // value is out of range.
-func (h *Histogram) RecordIntScale(val, scale int) error {
+func (h *Histogram) RecordIntScale(val int64, scale int) error {
 	return h.RecordIntScales(val, scale, 1)
 }
 
@@ -485,7 +485,7 @@ func (h *Histogram) RecordValue(v float64) error {
 // RecordDuration records the given time.Duration in seconds, returning an error
 // if the value is out of range.
 func (h *Histogram) RecordDuration(v time.Duration) error {
-	return h.RecordIntScale(int(v), -9)
+	return h.RecordIntScale(int64(v), -9)
 }
 
 // RecordCorrectedValue records the given value, correcting for stalls in the
@@ -603,8 +603,8 @@ func (h *Histogram) insertBin(hb *bin, count int64) uint64 {
 
 // RecordIntScales records n occurrences of the given value, returning an error if
 // the value is out of range.
-func (h *Histogram) RecordIntScales(val, scale int, n int64) error {
-	sign := 1
+func (h *Histogram) RecordIntScales(val int64, scale int, n int64) error {
+	sign := int64(1)
 	if val == 0 {
 		scale = 0
 	} else {

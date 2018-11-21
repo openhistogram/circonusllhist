@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"testing"
+	"time"
 )
 
 func TestCreate(t *testing.T) {
@@ -103,6 +104,68 @@ func TestBins(t *testing.T) {
 	h.RecordValue(100.0)
 	if h.bvs[0].val != 10 || h.bvs[0].exp != 2 {
 		t.Errorf("100.0 not added correctly")
+	}
+}
+
+func TestRecordDuration(t *testing.T) {
+	tests := []struct {
+		input      []time.Duration
+		inputUnit  time.Duration
+		approxSum  time.Duration
+		approxMean time.Duration
+		tolerance  time.Duration
+	}{
+		{
+			input:      []time.Duration{1 * time.Nanosecond},
+			inputUnit:  time.Nanosecond,
+			approxSum:  time.Nanosecond,
+			approxMean: time.Nanosecond,
+			tolerance:  time.Duration(1 * time.Nanosecond),
+		},
+		{
+			input:      []time.Duration{1000 * time.Second},
+			inputUnit:  time.Nanosecond,
+			approxSum:  time.Nanosecond,
+			approxMean: time.Nanosecond,
+			tolerance:  time.Duration(1 * time.Nanosecond),
+		},
+		{
+			input: []time.Duration{
+				4 * time.Second,
+				8 * time.Second,
+			},
+			inputUnit:  time.Second,
+			approxSum:  12.0 * time.Second,
+			approxMean: 6.0 * time.Second,
+			tolerance:  time.Duration(1 * time.Millisecond),
+		},
+	}
+
+	fuzzyEquals := func(expected, actual, tolerance time.Duration) bool {
+		diff := math.Abs(float64(expected) - float64(actual))
+		diffNs := time.Duration(diff)
+		if diffNs <= tolerance {
+			return true
+		}
+
+		return false
+	}
+
+	for n, test := range tests {
+		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
+			h := New()
+			for _, dur := range test.input {
+				h.RecordDuration(dur)
+			}
+
+			if v := time.Duration(h.ApproxSum()) * test.inputUnit; !fuzzyEquals(v, test.approxSum, test.tolerance) {
+				t.Fatalf("%v approx sum bad: have=%v want=%v", test.input, v, test.approxSum)
+			}
+
+			if v := time.Duration(h.ApproxMean()) * test.inputUnit; !fuzzyEquals(v, test.approxMean, test.tolerance) {
+				t.Fatalf("%v approx mean bad: have=%v want=%v", test.input, v, test.approxMean)
+			}
+		})
 	}
 }
 

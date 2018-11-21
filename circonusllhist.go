@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -479,6 +480,12 @@ func (h *Histogram) RecordIntScale(val, scale int) error {
 // of range.
 func (h *Histogram) RecordValue(v float64) error {
 	return h.RecordValues(v, 1)
+}
+
+// RecordDuration records the given time.Duration in seconds, returning an error
+// if the value is out of range.
+func (h *Histogram) RecordDuration(v time.Duration) error {
+	return h.RecordIntScale(int(v), -9)
 }
 
 // RecordCorrectedValue records the given value, correcting for stalls in the

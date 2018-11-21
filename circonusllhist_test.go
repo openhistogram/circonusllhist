@@ -116,6 +116,11 @@ func TestRecordDuration(t *testing.T) {
 		tolerance  time.Duration
 	}{
 		{
+			input:      []time.Duration{time.Nanosecond},
+			approxSum:  time.Nanosecond,
+			approxMean: time.Nanosecond,
+		},
+		{
 			input:      []time.Duration{3 * time.Nanosecond},
 			approxSum:  3 * time.Nanosecond,
 			approxMean: 3 * time.Nanosecond,

@@ -831,10 +831,18 @@ func (h *Histogram) Copy() *Histogram {
 		bvs = append(bvs, v)
 	}
 
+	lookup := [256][]uint16{}
+	for i, u := range h.lookup {
+		for _, v := range u {
+			lookup[i] = append(lookup[i], v)
+		}
+	}
+
 	return &Histogram{
 		allocd: h.allocd,
 		used:   h.used,
 		bvs:    bvs,
+		lookup: lookup,
 	}
 }
 

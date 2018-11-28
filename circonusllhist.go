@@ -817,6 +817,27 @@ func (h *Histogram) CopyAndReset() *Histogram {
 	}
 	return newhist
 }
+
+// Copy creates and returns an exact copy of a histogram without
+// resetting the contents of the original.
+func (h *Histogram) Copy() *Histogram {
+	if h.useLocks {
+		h.mutex.Lock()
+		defer h.mutex.Unlock()
+	}
+
+	bvs := []bin{}
+	for _, v := range h.bvs {
+		bvs = append(bvs, v)
+	}
+
+	return &Histogram{
+		allocd: h.allocd,
+		used:   h.used,
+		bvs:    bvs,
+	}
+}
+
 func (h *Histogram) DecStrings() []string {
 	if h.useLocks {
 		h.mutex.Lock()

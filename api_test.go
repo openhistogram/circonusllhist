@@ -226,3 +226,32 @@ func TestMinMaxMean(t *testing.T) {
 		t.Errorf("incorrect mean value")
 	}
 }
+
+func TestCopy(t *testing.T) {
+	h1 := hist.New()
+	for i := 0; i < 1000000; i++ {
+		if err := h1.RecordValue(float64(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	h2 := h1.Copy()
+	if !h2.Equals(h1) {
+		t.Errorf("expected copy: %v to equal original: %v", h2, h1)
+	}
+}
+
+func TestFullReset(t *testing.T) {
+	h1 := hist.New()
+	for i := 0; i < 1000000; i++ {
+		if err := h1.RecordValue(float64(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	h1.Reset()
+	h2 := hist.New()
+	if !h2.Equals(h1) {
+		t.Errorf("expected reset value: %v to equal new value: %v", h1, h2)
+	}
+}

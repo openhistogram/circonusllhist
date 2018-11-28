@@ -795,28 +795,53 @@ func (h *Histogram) Equals(other *Histogram) bool {
 	return true
 }
 
-func (h *Histogram) CopyAndReset() *Histogram {
+// Copy creates and returns an exact copy of a histogram.
+func (h *Histogram) Copy() *Histogram {
 	if h.useLocks {
 		h.mutex.Lock()
 		defer h.mutex.Unlock()
 	}
-	newhist := &Histogram{
-		allocd: h.allocd,
-		used:   h.used,
-		bvs:    h.bvs,
+
+	newhist := New()
+	newhist.allocd = h.allocd
+	newhist.used = h.used
+	newhist.useLocks = h.useLocks
+
+	newhist.bvs = []bin{}
+	for _, v := range h.bvs {
+		newhist.bvs = append(newhist.bvs, v)
 	}
+
+	for i, u := range h.lookup {
+		for _, v := range u {
+			newhist.lookup[i] = append(newhist.lookup[i], v)
+		}
+	}
+
+	return newhist
+}
+
+// FullReset resets a histogram to default empty values.
+func (h *Histogram) FullReset() {
+	if h.useLocks {
+		h.mutex.Lock()
+		defer h.mutex.Unlock()
+	}
+
 	h.allocd = defaultHistSize
 	h.bvs = make([]bin, defaultHistSize)
 	h.used = 0
-	for i := 0; i < 256; i++ {
-		if h.lookup[i] != nil {
-			for j := range h.lookup[i] {
-				h.lookup[i][j] = 0
-			}
-		}
-	}
+	h.lookup = [256][]uint16{}
+}
+
+// CopyAndReset creates and returns an exact copy of a histogram,
+// and resets it to default empty values.
+func (h *Histogram) CopyAndReset() *Histogram {
+	newhist := h.Copy()
+	h.FullReset()
 	return newhist
 }
+
 func (h *Histogram) DecStrings() []string {
 	if h.useLocks {
 		h.mutex.Lock()

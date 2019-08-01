@@ -255,3 +255,25 @@ func TestFullReset(t *testing.T) {
 		t.Errorf("expected reset value: %v to equal new value: %v", h1, h2)
 	}
 }
+
+func TestMerge(t *testing.T) {
+	h1 := hist.New()
+	h2 := hist.New()
+	expect := hist.New()
+	for i := 0; i < 1000; i++ {
+		if err := h1.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := h2.RecordValues(float64(i), 2); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.RecordValues(float64(i), 3); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	h1.Merge(h2)
+	if !h1.Equals(expect) {
+		t.Error("Expected histograms to be equivalent")
+	}
+}

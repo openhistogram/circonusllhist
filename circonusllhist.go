@@ -915,3 +915,15 @@ func (h *Histogram) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(buf.String())
 }
+
+// Merge merges all bins from another histogram.
+func (h *Histogram) Merge(o *Histogram) {
+	if o.useLocks {
+		o.mutex.Lock()
+		defer o.mutex.Unlock()
+	}
+
+	for _, b := range o.bvs {
+		h.insertBin(&b, int64(b.count))
+	}
+}

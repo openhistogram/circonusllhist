@@ -260,7 +260,9 @@ func TestMerge(t *testing.T) {
 	h1 := hist.New()
 	h2 := hist.New()
 	expect := hist.New()
-	for i := 0; i < 1000; i++ {
+
+	// record 0-100 values in both h1 and h2.
+	for i := 0; i < 100; i++ {
 		if err := h1.RecordValues(float64(i), 1); err != nil {
 			t.Fatal(err)
 		}
@@ -268,6 +270,24 @@ func TestMerge(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := expect.RecordValues(float64(i), 3); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// record 100-200 values in h1.
+	for i := 100; i < 200; i++ {
+		if err := h1.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// record 400-600 values in h2.
+	for i := 400; i < 600; i++ {
+		if err := h2.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.RecordValues(float64(i), 1); err != nil {
 			t.Fatal(err)
 		}
 	}

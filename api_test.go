@@ -255,3 +255,77 @@ func TestFullReset(t *testing.T) {
 		t.Errorf("expected reset value: %v to equal new value: %v", h1, h2)
 	}
 }
+
+func TestMerge(t *testing.T) {
+	h1 := hist.New()
+	h2 := hist.New()
+	expect := hist.New()
+
+	// record 0-100 values in both h1 and h2.
+	for i := 0; i < 100; i++ {
+		if err := h1.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := h2.RecordValues(float64(i), 2); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.RecordValues(float64(i), 3); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// record 100-200 values in h1.
+	for i := 100; i < 200; i++ {
+		if err := h1.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// record 400-600 values in h2.
+	for i := 400; i < 600; i++ {
+		if err := h2.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := expect.RecordValues(float64(i), 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	h1.Merge(h2)
+	if !h1.Equals(expect) {
+		t.Error("Expected histograms to be equivalent")
+	}
+}
+
+func BenchmarkHistogramMerge(b *testing.B) {
+	b.Run("random", func(b *testing.B) {
+		rand.Seed(time.Now().UnixNano())
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			h1 := hist.New()
+			for i := 0; i < 500; i++ {
+				h1.RecordIntScale(rand.Int63n(1000), 0)
+			}
+			h2 := hist.New()
+			for i := 0; i < 500; i++ {
+				h2.RecordIntScale(rand.Int63n(1000), 0)
+			}
+			h1.Merge(h2)
+		}
+	})
+
+	b.Run("large insert", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			h1 := hist.New()
+			h1.RecordIntScale(1, 0)
+			h1.RecordIntScale(1000, 0)
+			h2 := hist.New()
+			for i := 10; i < 1000; i++ {
+				h2.RecordIntScale(int64(i), 0)
+			}
+			h1.Merge(h2)
+		}
+	})
+}

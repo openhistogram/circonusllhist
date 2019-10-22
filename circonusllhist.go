@@ -562,7 +562,10 @@ func (h *Histogram) insertBin(hb *bin, count int64) uint64 {
 	}
 	found, idx := h.internalFind(hb)
 	if !found {
-		return h.insertNewBinAt(idx, hb, count)
+		count := h.insertNewBinAt(idx, hb, count)
+		// update the fast lookup table data after the index
+		h.updateFast(idx)
+		return count
 	}
 	return h.updateOldBinAt(idx, hb, count)
 }
@@ -585,14 +588,17 @@ func (h *Histogram) insertNewBinAt(idx uint16, hb *bin, count int64) uint64 {
 	h.bvs[idx].exp = hb.exp
 	h.bvs[idx].count = uint64(count)
 	h.used++
-	for i := idx; i < h.used; i++ {
+	return h.bvs[idx].count
+}
+
+func (h *Histogram) updateFast(start uint16) {
+	for i := start; i < h.used; i++ {
 		f2 := h.bvs[i].newFastL2()
 		if h.lookup[f2.l1] == nil {
 			h.lookup[f2.l1] = make([]uint16, 256)
 		}
 		h.lookup[f2.l1][f2.l2] = uint16(i) + 1
 	}
-	return h.bvs[idx].count
 }
 
 func (h *Histogram) updateOldBinAt(idx uint16, hb *bin, count int64) uint64 {
@@ -961,4 +967,7 @@ func (h *Histogram) Merge(o *Histogram) {
 	for ; j < o.used; j++ {
 		h.insertNewBinAt(h.used, &o.bvs[j], int64(o.bvs[j].count))
 	}
+
+	// rebuild all the fast lookup table
+	h.updateFast(0)
 }

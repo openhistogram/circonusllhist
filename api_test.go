@@ -297,3 +297,35 @@ func TestMerge(t *testing.T) {
 		t.Error("Expected histograms to be equivalent")
 	}
 }
+
+func BenchmarkHistogramMerge(b *testing.B) {
+	b.Run("random", func(b *testing.B) {
+		rand.Seed(time.Now().UnixNano())
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			h1 := hist.New()
+			for i := 0; i < 500; i++ {
+				h1.RecordIntScale(rand.Int63n(1000), 0)
+			}
+			h2 := hist.New()
+			for i := 0; i < 500; i++ {
+				h2.RecordIntScale(rand.Int63n(1000), 0)
+			}
+			h1.Merge(h2)
+		}
+	})
+
+	b.Run("large insert", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			h1 := hist.New()
+			h1.RecordIntScale(1, 0)
+			h1.RecordIntScale(1000, 0)
+			h2 := hist.New()
+			for i := 10; i < 1000; i++ {
+				h2.RecordIntScale(int64(i), 0)
+			}
+			h1.Merge(h2)
+		}
+	})
+}

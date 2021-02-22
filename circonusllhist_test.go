@@ -2,6 +2,7 @@ package circonusllhist
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -51,6 +52,33 @@ func TestSerialize(t *testing.T) {
 	if err != nil {
 		t.Error(h2, err)
 	}
+	if !h.Equals(h2) {
+		t.Log(h.DecStrings())
+		t.Log(h2.DecStrings())
+		t.Error("histograms do not match")
+	}
+}
+
+func TestJSON(t *testing.T) {
+	h, err := NewFromStrings([]string{
+		"H[0.0e+00]=1",
+		"H[1.0e+01]=1",
+		"H[2.0e+02]=1",
+	}, false)
+	if err != nil {
+		t.Errorf("could not read from strings for test error = %v", err)
+	}
+
+	jh, err := json.Marshal(h)
+	if err != nil {
+		t.Errorf("could not marshall json for test error = %v", err)
+	}
+
+	h2 := &Histogram{}
+	if err := json.Unmarshal(jh, h2); err != nil {
+		t.Errorf("could not unmarshall json for test error = %v", err)
+	}
+
 	if !h.Equals(h2) {
 		t.Log(h.DecStrings())
 		t.Log(h2.DecStrings())

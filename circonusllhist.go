@@ -388,14 +388,16 @@ func (h *Histogram) Serialize(w io.Writer) error {
 
 func (h *Histogram) SerializeB64(w io.Writer) error {
 	buf := bytes.NewBuffer([]byte{})
-	h.Serialize(buf)
+	if err := h.Serialize(buf); err != nil {
+		return err
+	}
 
 	encoder := base64.NewEncoder(base64.StdEncoding, w)
 	if _, err := encoder.Write(buf.Bytes()); err != nil {
 		return err
 	}
-	encoder.Close()
-	return nil
+
+	return encoder.Close()
 }
 
 // New returns a new Histogram
@@ -913,12 +915,19 @@ func (h *Histogram) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
+
 	data, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
 		return err
 	}
-	h, err = Deserialize(bytes.NewBuffer(data))
-	return err
+
+	hNew, err := Deserialize(bytes.NewBuffer(data))
+	if err != nil {
+		return err
+	}
+
+	h.Merge(hNew)
+	return nil
 }
 
 func (h *Histogram) MarshalJSON() ([]byte, error) {

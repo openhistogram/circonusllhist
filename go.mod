@@ -1,3 +1,3 @@
-module github.com/circonus-labs/circonusllhist
+module github.com/openhistogram/circonusllhist
 
 go 1.16

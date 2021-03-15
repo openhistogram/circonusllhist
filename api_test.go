@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	hist "github.com/circonus-labs/circonusllhist"
+	hist "github.com/openhistogram/circonusllhist"
 )
 
 func fuzzy_equals(expected, actual float64) bool {

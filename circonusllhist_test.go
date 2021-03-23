@@ -64,7 +64,7 @@ func TestCount(t *testing.T) {
 		"H[0.0e+00]=1",
 		"H[1.0e+01]=1",
 		"H[2.0e+02]=1",
-	}, false)
+	}, true)
 	if err != nil {
 		t.Error("could not read from strings for test")
 	}

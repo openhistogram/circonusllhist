@@ -458,8 +458,12 @@ func (h *Histogram) Mean() float64 {
 
 //Count returns the number of recorded values.
 func (h *Histogram) Count() uint64 {
+	if h.useLocks {
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
+	}
 	var count uint64
-	for _, bin := range h.bvs {
+	for _, bin := range h.bvs[0:h.used] {
 		count += bin.count
 	}
 	return count

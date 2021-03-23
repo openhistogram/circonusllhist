@@ -464,6 +464,9 @@ func (h *Histogram) Count() uint64 {
 	}
 	var count uint64
 	for _, bin := range h.bvs[0:h.used] {
+		if bin.isNaN() {
+			continue
+		}
 		count += bin.count
 	}
 	return count

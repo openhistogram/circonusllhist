@@ -456,6 +456,32 @@ func (h *Histogram) Mean() float64 {
 	return h.ApproxMean()
 }
 
+//Count returns the number of recorded values.
+func (h *Histogram) Count() uint64 {
+	if h.useLocks {
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
+	}
+	var count uint64
+	for _, bin := range h.bvs[0:h.used] {
+		if bin.isNaN() {
+			continue
+		}
+		count += bin.count
+	}
+	return count
+}
+
+//BinCount returns the number of used bins.
+func (h *Histogram) BinCount() uint64 {
+	if h.useLocks {
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
+	}
+	binCount := h.used
+	return uint64(binCount)
+}
+
 // Reset forgets all bins in the histogram (they remain allocated)
 func (h *Histogram) Reset() {
 	if h.useLocks {

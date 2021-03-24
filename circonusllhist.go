@@ -472,6 +472,16 @@ func (h *Histogram) Count() uint64 {
 	return count
 }
 
+//BinCount returns the number of bins.
+func (h *Histogram) BinCount() uint64 {
+	if h.useLocks {
+		h.mutex.RLock()
+		defer h.mutex.RUnlock()
+	}
+	binCount := h.used
+	return uint64(binCount)
+}
+
 // Reset forgets all bins in the histogram (they remain allocated)
 func (h *Histogram) Reset() {
 	if h.useLocks {

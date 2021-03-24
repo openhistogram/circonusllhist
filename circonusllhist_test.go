@@ -80,6 +80,20 @@ func TestCount(t *testing.T) {
 	}
 }
 
+func TestBinCount(t *testing.T) {
+	h, err := NewFromStrings([]string{
+		"H[0.0e+00]=1",
+		"H[1.0e+01]=1",
+		"H[2.0e+02]=1",
+	}, true)
+	if err != nil {
+		t.Error("could not read from strings for test")
+	}
+	if h.BinCount() != 3 {
+		t.Error("bin count is incorrect")
+	}
+}
+
 func TestJSON(t *testing.T) {
 	h, err := NewFromStrings([]string{
 		"H[0.0e+00]=1",

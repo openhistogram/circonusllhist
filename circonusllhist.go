@@ -472,7 +472,7 @@ func (h *Histogram) Count() uint64 {
 	return count
 }
 
-//BinCount returns the number of bins.
+//BinCount returns the number of used bins.
 func (h *Histogram) BinCount() uint64 {
 	if h.useLocks {
 		h.mutex.RLock()

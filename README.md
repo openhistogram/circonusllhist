@@ -10,7 +10,7 @@ Package `circllhist` provides an implementation of OpenHistogram's fixed log-lin
 
 ## License
 
-[OpenHistogram](LICENSE.OpenHistogram) OR [BSD-3-Clause](LICENSE)
+[Apache 2.0](LICENSE)
 
 ## Documentation
 

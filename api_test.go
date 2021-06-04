@@ -100,7 +100,7 @@ func TestQuantiles(t *testing.T) {
 }
 
 func BenchmarkHistogramRecordValue(b *testing.B) {
-	h := hist.NewNoLocks()
+	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
 		h.RecordValue(float64(i % 1000))
 	}
@@ -108,7 +108,7 @@ func BenchmarkHistogramRecordValue(b *testing.B) {
 }
 
 func BenchmarkHistogramTypical(b *testing.B) {
-	h := hist.NewNoLocks()
+	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
 		h.RecordValue(float64(i % 1000))
 	}
@@ -116,7 +116,7 @@ func BenchmarkHistogramTypical(b *testing.B) {
 }
 
 func BenchmarkHistogramRecordIntScale(b *testing.B) {
-	h := hist.NewNoLocks()
+	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
 		h.RecordIntScale(int64(i%90+10), (i/1000)%3)
 	}
@@ -124,7 +124,7 @@ func BenchmarkHistogramRecordIntScale(b *testing.B) {
 }
 
 func BenchmarkHistogramTypicalIntScale(b *testing.B) {
-	h := hist.NewNoLocks()
+	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
 		h.RecordIntScale(int64(i%90+10), (i/1000)%3)
 	}

@@ -282,7 +282,7 @@ func getBytesRequired(val uint64) (len int8) {
 	return int8(BVL1)
 }
 
-func writeBin(out io.Writer, in bin, idx int) (err error) {
+func writeBin(out io.Writer, in bin) (err error) {
 
 	err = binary.Write(out, binary.BigEndian, in.val)
 	if err != nil {
@@ -350,17 +350,13 @@ func readBin(in io.Reader) (out bin, err error) {
 }
 
 func Deserialize(in io.Reader) (h *Histogram, err error) {
-	h = New()
-	if h.bvs == nil {
-		h.bvs = make([]bin, 0, defaultHistSize)
-	}
-
 	var nbin int16
 	err = binary.Read(in, binary.BigEndian, &nbin)
 	if err != nil {
 		return
 	}
 
+	h = New(Size(uint16(nbin)))
 	for ii := int16(0); ii < nbin; ii++ {
 		bb, err := readBin(in)
 		if err != nil {
@@ -372,15 +368,22 @@ func Deserialize(in io.Reader) (h *Histogram, err error) {
 }
 
 func (h *Histogram) Serialize(w io.Writer) error {
+	var nbin int16
+	for i := range h.bvs {
+		if h.bvs[i].count != 0 {
+			nbin += 1
+		}
+	}
 
-	var nbin int16 = int16(len(h.bvs))
 	if err := binary.Write(w, binary.BigEndian, nbin); err != nil {
 		return err
 	}
-
-	for i := 0; i < len(h.bvs); i++ {
-		if err := writeBin(w, h.bvs[i], i); err != nil {
-			return err
+	
+	for _, bv := range h.bvs {
+		if bv.count != 0 {
+			if err := writeBin(w, bv); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

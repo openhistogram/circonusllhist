@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 )
@@ -257,4 +258,94 @@ func TestBinSizes(t *testing.T) {
 	helpTestVB(t, -1.0, -1.0, -0.1)
 	helpTestVB(t, -0.00123, -0.0012, -0.0001)
 	helpTestVB(t, -987324, -980000, -10000)
+}
+
+// preloadedTester knows how to preload values, then use them to benchmark a histogram
+type preloadedTester interface {
+	preload(n int)
+	run(histogram *Histogram) error
+}
+
+// intScale knows how to benchmark RecordIntScale
+type intScale struct {
+	// scale is the scale of the distribution of values - this allows the benchmark
+	// to tease apart differences in the usage of a histogram in different applications
+	// where it may be storing fairly homogenous values or any value whatsoever
+	scale int
+
+	// integers hold the integers we will feed RecordIntScale
+	integers []int64
+	// scales hold the scales we will feed RecordIntScale
+	scales []int
+
+	n int
+}
+
+func (t *intScale) preload(n int) {
+	t.n = 0
+	t.integers = make([]int64, n)
+	t.scales = make([]int, n)
+
+	scaleMin := rand.Intn(math.MaxInt64 - t.scale)
+	for i := 0; i < n; i++ {
+		t.integers[i] = rand.Int63() * (rand.Int63n(2) - 1) // allow negatives!
+		t.scales[i] = rand.Intn(t.scale) + scaleMin
+	}
+}
+
+func (t *intScale) run(histogram *Histogram) error {
+	n := t.n
+	t.n += 1
+	return histogram.RecordIntScale(t.integers[n], t.scales[n])
+}
+
+// value knows how to benchmark RecordValue
+type value struct {
+	// stddev is the standard deviation of the distribution of values - this allows the
+	// benchmark to tease apart differences in the usage of a histogram in different
+	// applications where it may be storing fairly homogenous values or any value whatsoever
+	stddev float64
+
+	// values hold the integers we will feed RecordValue
+	values []float64
+
+	n int
+}
+
+func (t *value) preload(n int) {
+	t.n = 0
+	t.values = make([]float64, n)
+
+	mean := float64(rand.Int63() * (rand.Int63n(2) - 1)) // allow negatives!
+	for i := 0; i < n; i++ {
+		t.values[i] = rand.NormFloat64()*t.stddev + mean
+	}
+}
+
+func (t *value) run(histogram *Histogram) error {
+	n := t.n
+	t.n += 1
+	return histogram.RecordValue(t.values[n])
+}
+
+func BenchmarkRecord(b *testing.B) {
+	rand.Seed(time.Now().UnixNano())
+	for _, scale := range []int{1, 2, 4, 8, 16, 32, 64} {
+		for _, tester := range []preloadedTester{
+			&intScale{scale: scale},
+			&value{stddev: math.Pow10(scale)},
+		} {
+			name := fmt.Sprintf("%T", tester)
+			b.Run(fmt.Sprintf("%s_%d", name[strings.Index(name, ".")+1:], scale), func(b *testing.B) {
+				histogram := New()
+				tester.preload(b.N)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					if err := tester.run(histogram); err != nil {
+						b.Error(err)
+					}
+				}
+			})
+		}
+	}
 }

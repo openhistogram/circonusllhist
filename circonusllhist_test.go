@@ -329,6 +329,18 @@ func (t *value) run(histogram *Histogram) error {
 }
 
 func BenchmarkRecord(b *testing.B) {
+	benchmarkForHist(b, func() *Histogram {
+		return New()
+	})
+}
+
+func BenchmarkRecordWithoutLookups(b *testing.B) {
+	benchmarkForHist(b, func() *Histogram {
+		return New(NoLookup())
+	})
+}
+
+func benchmarkForHist(b *testing.B, constructor func() *Histogram) {
 	rand.Seed(time.Now().UnixNano())
 	for _, scale := range []int{1, 2, 4, 8, 16, 32, 64} {
 		for _, tester := range []preloadedTester{
@@ -337,7 +349,7 @@ func BenchmarkRecord(b *testing.B) {
 		} {
 			name := fmt.Sprintf("%T", tester)
 			b.Run(fmt.Sprintf("%s_%d", name[strings.Index(name, ".")+1:], scale), func(b *testing.B) {
-				histogram := New()
+				histogram := constructor()
 				tester.preload(b.N)
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

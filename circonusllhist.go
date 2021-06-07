@@ -237,7 +237,8 @@ type Histogram struct {
 	used   uint16
 	allocd uint16
 
-	lookup [256][]uint16
+	lookup    [][]uint16
+	useLookup bool
 
 	mutex    sync.RWMutex
 	useLocks bool
@@ -294,7 +295,7 @@ func writeBin(out io.Writer, in bin) (err error) {
 		return
 	}
 
-	var tgtType int8 = getBytesRequired(in.count)
+	var tgtType = getBytesRequired(in.count)
 
 	err = binary.Write(out, binary.BigEndian, tgtType)
 	if err != nil {
@@ -342,7 +343,7 @@ func readBin(in io.Reader) (out bin, err error) {
 
 	var count uint64 = 0
 	for i := int(bvl + 1); i >= 0; i-- {
-		count |= (uint64(bcount[i]) << (uint8(i) * 8))
+		count |= uint64(bcount[i]) << (uint8(i) * 8)
 	}
 
 	out.count = count
@@ -378,7 +379,7 @@ func (h *Histogram) Serialize(w io.Writer) error {
 	if err := binary.Write(w, binary.BigEndian, nbin); err != nil {
 		return err
 	}
-	
+
 	for _, bv := range h.bvs {
 		if bv.count != 0 {
 			if err := writeBin(w, bv); err != nil {
@@ -410,6 +411,9 @@ type Options struct {
 
 	// UseLocks determines if the histogram should use locks
 	UseLocks bool
+
+	// UseLookup determines if the histogram should use a lookup table for bins
+	UseLookup bool
 }
 
 // Option knows how to mutate the Options to change initialization
@@ -422,7 +426,21 @@ func NoLocks() Option {
 	}
 }
 
-// Size configures a histogram to use a specific number of bins
+// NoLookup configures a histogram to not use a lookup table for bins.
+// This is an appropriate option to use when the data set being operated
+// over contains a large number of individual histograms and the insert
+// speed into any histogram is not of the utmost importance. This option
+// reduces the baseline memory consumption of one Histogram by at least
+// 0.5kB and up to 130kB while increasing the insertion time by ~20%.
+func NoLookup() Option {
+	return func(options *Options) {
+		options.UseLookup = false
+	}
+}
+
+// Size configures a histogram to initialize a specific number of bins.
+// When more bins are required, allocations increase linearly by the default
+// size (100).
 func Size(size uint16) Option {
 	return func(options *Options) {
 		options.Size = size
@@ -432,18 +450,24 @@ func Size(size uint16) Option {
 // New returns a new Histogram, respecting the passed Options.
 func New(options ...Option) *Histogram {
 	o := Options{
-		Size: defaultHistSize,
+		Size:     defaultHistSize,
 		UseLocks: true,
+		UseLookup: true,
 	}
 	for _, opt := range options {
 		opt(&o)
 	}
-	return &Histogram{
-		allocd:   o.Size,
-		used:     0,
-		bvs:      make([]bin, o.Size),
-		useLocks: o.UseLocks,
+	h := &Histogram{
+		allocd:    o.Size,
+		used:      0,
+		bvs:       make([]bin, o.Size),
+		useLocks:  o.UseLocks,
+		useLookup: o.UseLookup,
 	}
+	if h.useLookup {
+		h.lookup = make([][]uint16, 256)
+	}
+	return h
 }
 
 // Deprecated: use New(NoLocks()) instead
@@ -469,6 +493,8 @@ func newFromBins(bins []bin, locks bool) *Histogram {
 		used:     uint16(len(bins)),
 		bvs:      bins,
 		useLocks: locks,
+		lookup: make([][]uint16, 256),
+		useLookup: true,
 	}
 }
 
@@ -519,6 +545,11 @@ func (h *Histogram) Reset() {
 		h.mutex.Lock()
 		defer h.mutex.Unlock()
 	}
+	h.used = 0
+
+	if !h.useLookup {
+		return
+	}
 	for i := 0; i < 256; i++ {
 		if h.lookup[i] != nil {
 			for j := range h.lookup[i] {
@@ -526,7 +557,6 @@ func (h *Histogram) Reset() {
 			}
 		}
 	}
-	h.used = 0
 }
 
 // RecordIntScale records an integer scaler value, returning an error if the
@@ -578,10 +608,12 @@ func (h *Histogram) internalFind(hb *bin) (bool, uint16) {
 	if h.used == 0 {
 		return false, 0
 	}
-	f2 := hb.newFastL2()
-	if h.lookup[f2.l1] != nil {
-		if idx := h.lookup[f2.l1][f2.l2]; idx != 0 {
-			return true, idx - 1
+	if h.useLookup {
+		f2 := hb.newFastL2()
+		if h.lookup[f2.l1] != nil {
+			if idx := h.lookup[f2.l1][f2.l2]; idx != 0 {
+				return true, idx - 1
+			}
 		}
 	}
 	rv := -1
@@ -651,6 +683,9 @@ func (h *Histogram) insertNewBinAt(idx uint16, hb *bin, count int64) uint64 {
 }
 
 func (h *Histogram) updateFast(start uint16) {
+	if !h.useLookup {
+		return
+	}
 	for i := start; i < h.used; i++ {
 		f2 := h.bvs[i].newFastL2()
 		if h.lookup[f2.l1] == nil {
@@ -885,9 +920,13 @@ func (h *Histogram) Copy() *Histogram {
 		newhist.bvs = append(newhist.bvs, v)
 	}
 
-	for i, u := range h.lookup {
-		for _, v := range u {
-			newhist.lookup[i] = append(newhist.lookup[i], v)
+	newhist.useLookup = h.useLookup
+	if h.useLookup {
+		newhist.lookup = make([][]uint16, 256)
+		for i, u := range h.lookup {
+			for _, v := range u {
+				newhist.lookup[i] = append(newhist.lookup[i], v)
+			}
 		}
 	}
 
@@ -904,7 +943,9 @@ func (h *Histogram) FullReset() {
 	h.allocd = defaultHistSize
 	h.bvs = make([]bin, defaultHistSize)
 	h.used = 0
-	h.lookup = [256][]uint16{}
+	if h.useLookup {
+		h.lookup = make([][]uint16, 256)
+	}
 }
 
 // CopyAndReset creates and returns an exact copy of a histogram,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -329,6 +330,18 @@ func (t *value) run(histogram *Histogram) error {
 }
 
 func BenchmarkRecord(b *testing.B) {
+	benchmarkForHist(b, func() *Histogram {
+		return New()
+	})
+}
+
+func BenchmarkRecordWithoutLookups(b *testing.B) {
+	benchmarkForHist(b, func() *Histogram {
+		return New(NoLookup())
+	})
+}
+
+func benchmarkForHist(b *testing.B, constructor func() *Histogram) {
 	rand.Seed(time.Now().UnixNano())
 	for _, scale := range []int{1, 2, 4, 8, 16, 32, 64} {
 		for _, tester := range []preloadedTester{
@@ -337,7 +350,7 @@ func BenchmarkRecord(b *testing.B) {
 		} {
 			name := fmt.Sprintf("%T", tester)
 			b.Run(fmt.Sprintf("%s_%d", name[strings.Index(name, ".")+1:], scale), func(b *testing.B) {
-				histogram := New()
+				histogram := constructor()
 				tester.preload(b.N)
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
@@ -346,6 +359,58 @@ func BenchmarkRecord(b *testing.B) {
 					}
 				}
 			})
+		}
+	}
+}
+
+// TestCustomRoundTripping tests that clients using the HistogramWithoutLookups
+// structure for custom serialization and deserialization get interchangeable
+// behavior with the default spec.
+func TestCustomRoundTripping(t *testing.T) {
+	h := New()
+	rand.Seed(time.Now().UnixNano())
+	for i := 0; i < 100; i++ {
+		if err := h.RecordIntScale(rand.Int63(), rand.Int()); err != nil {
+			t.Fatalf("could not record numeric value: %v", err)
+		}
+	}
+
+	defaultBytes, err := json.Marshal(h)
+	if err != nil {
+		t.Fatalf("could not marshal histogram: %v", err)
+	}
+
+	withoutLookupBytes, err := json.Marshal(&HistogramWithoutLookups{histogram: h})
+	if err != nil {
+		t.Fatalf("could not marshal histogram: %v", err)
+	}
+
+	if !reflect.DeepEqual(defaultBytes, withoutLookupBytes) {
+		t.Fatalf("histogram without lookups serialized into something different than default: expected %v, got %v", defaultBytes, withoutLookupBytes)
+	}
+
+	for source, data := range map[string][]byte {
+		"default": defaultBytes,
+		"withoutLookups": withoutLookupBytes,
+	} {
+		var deserializedWithoutLookups HistogramWithoutLookups
+		if err := json.Unmarshal(data, &deserializedWithoutLookups); err != nil {
+			t.Fatalf("could not deserialize %s bytes into custom struct: %v", source, err)
+		}
+		if deserializedWithoutLookups.histogram.useLookup != false || deserializedWithoutLookups.histogram.lookup != nil {
+			t.Errorf("after deserializing %s bytes into custom struct, got allocated lookup table", source)
+		}
+		extracted := deserializedWithoutLookups.HistogramWithLookups()
+		if extracted.useLookup != true || len(extracted.lookup) != 256 {
+			t.Errorf("after deserializing %s bytes into cutom struct and extracting with lookups, did not get allocated lookup table", source)
+		}
+
+		var deserializedDefault Histogram
+		if err := json.Unmarshal(data, &deserializedDefault); err != nil {
+			t.Fatalf("could not deserialize %s bytes into default struct: %v", source, err)
+		}
+		if deserializedDefault.useLookup != true || len(deserializedDefault.lookup) != 256 {
+			t.Errorf("after deserializing %s bytes into default struct, did not get allocated lookup table", source)
 		}
 	}
 }

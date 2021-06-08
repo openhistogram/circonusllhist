@@ -235,9 +235,9 @@ func (h1 *bin) compare(h2 *bin) int {
 type Histogram struct {
 	bvs    []bin
 	used   uint16
-	allocd uint16
 
-	lookup [256][]uint16
+	lookup    [][]uint16
+	useLookup bool
 
 	mutex    sync.RWMutex
 	useLocks bool
@@ -294,7 +294,7 @@ func writeBin(out io.Writer, in bin) (err error) {
 		return
 	}
 
-	var tgtType int8 = getBytesRequired(in.count)
+	var tgtType = getBytesRequired(in.count)
 
 	err = binary.Write(out, binary.BigEndian, tgtType)
 	if err != nil {
@@ -342,7 +342,7 @@ func readBin(in io.Reader) (out bin, err error) {
 
 	var count uint64 = 0
 	for i := int(bvl + 1); i >= 0; i-- {
-		count |= (uint64(bcount[i]) << (uint8(i) * 8))
+		count |= uint64(bcount[i]) << (uint8(i) * 8)
 	}
 
 	out.count = count
@@ -350,13 +350,18 @@ func readBin(in io.Reader) (out bin, err error) {
 }
 
 func Deserialize(in io.Reader) (h *Histogram, err error) {
+	return DeserializeWithOptions(in)
+}
+
+func DeserializeWithOptions(in io.Reader, options ...Option) (h *Histogram, err error) {
 	var nbin int16
 	err = binary.Read(in, binary.BigEndian, &nbin)
 	if err != nil {
 		return
 	}
 
-	h = New(Size(uint16(nbin)))
+	options = append(options, Size(uint16(nbin)))
+	h = New(options...)
 	for ii := int16(0); ii < nbin; ii++ {
 		bb, err := readBin(in)
 		if err != nil {
@@ -378,7 +383,7 @@ func (h *Histogram) Serialize(w io.Writer) error {
 	if err := binary.Write(w, binary.BigEndian, nbin); err != nil {
 		return err
 	}
-	
+
 	for _, bv := range h.bvs {
 		if bv.count != 0 {
 			if err := writeBin(w, bv); err != nil {
@@ -410,6 +415,9 @@ type Options struct {
 
 	// UseLocks determines if the histogram should use locks
 	UseLocks bool
+
+	// UseLookup determines if the histogram should use a lookup table for bins
+	UseLookup bool
 }
 
 // Option knows how to mutate the Options to change initialization
@@ -422,7 +430,21 @@ func NoLocks() Option {
 	}
 }
 
-// Size configures a histogram to use a specific number of bins
+// NoLookup configures a histogram to not use a lookup table for bins.
+// This is an appropriate option to use when the data set being operated
+// over contains a large number of individual histograms and the insert
+// speed into any histogram is not of the utmost importance. This option
+// reduces the baseline memory consumption of one Histogram by at least
+// 0.5kB and up to 130kB while increasing the insertion time by ~20%.
+func NoLookup() Option {
+	return func(options *Options) {
+		options.UseLookup = false
+	}
+}
+
+// Size configures a histogram to initialize a specific number of bins.
+// When more bins are required, allocations increase linearly by the default
+// size (100).
 func Size(size uint16) Option {
 	return func(options *Options) {
 		options.Size = size
@@ -432,18 +454,23 @@ func Size(size uint16) Option {
 // New returns a new Histogram, respecting the passed Options.
 func New(options ...Option) *Histogram {
 	o := Options{
-		Size: defaultHistSize,
+		Size:     defaultHistSize,
 		UseLocks: true,
+		UseLookup: true,
 	}
 	for _, opt := range options {
 		opt(&o)
 	}
-	return &Histogram{
-		allocd:   o.Size,
-		used:     0,
-		bvs:      make([]bin, o.Size),
-		useLocks: o.UseLocks,
+	h := &Histogram{
+		used:      0,
+		bvs:       make([]bin, o.Size),
+		useLocks:  o.UseLocks,
+		useLookup: o.UseLookup,
 	}
+	if h.useLookup {
+		h.lookup = make([][]uint16, 256)
+	}
+	return h
 }
 
 // Deprecated: use New(NoLocks()) instead
@@ -465,10 +492,11 @@ func NewFromStrings(strs []string, locks bool) (*Histogram, error) {
 // NewFromBins returns a Histogram created from a bins struct slice
 func newFromBins(bins []bin, locks bool) *Histogram {
 	return &Histogram{
-		allocd:   uint16(len(bins) + 10), // pad it with 10
 		used:     uint16(len(bins)),
 		bvs:      bins,
 		useLocks: locks,
+		lookup: make([][]uint16, 256),
+		useLookup: true,
 	}
 }
 
@@ -519,6 +547,11 @@ func (h *Histogram) Reset() {
 		h.mutex.Lock()
 		defer h.mutex.Unlock()
 	}
+	h.used = 0
+
+	if !h.useLookup {
+		return
+	}
 	for i := 0; i < 256; i++ {
 		if h.lookup[i] != nil {
 			for j := range h.lookup[i] {
@@ -526,7 +559,6 @@ func (h *Histogram) Reset() {
 			}
 		}
 	}
-	h.used = 0
 }
 
 // RecordIntScale records an integer scaler value, returning an error if the
@@ -578,10 +610,12 @@ func (h *Histogram) internalFind(hb *bin) (bool, uint16) {
 	if h.used == 0 {
 		return false, 0
 	}
-	f2 := hb.newFastL2()
-	if h.lookup[f2.l1] != nil {
-		if idx := h.lookup[f2.l1][f2.l2]; idx != 0 {
-			return true, idx - 1
+	if h.useLookup {
+		f2 := hb.newFastL2()
+		if h.lookup[f2.l1] != nil {
+			if idx := h.lookup[f2.l1][f2.l2]; idx != 0 {
+				return true, idx - 1
+			}
 		}
 	}
 	rv := -1
@@ -630,19 +664,8 @@ func (h *Histogram) insertBin(hb *bin, count int64) uint64 {
 }
 
 func (h *Histogram) insertNewBinAt(idx uint16, hb *bin, count int64) uint64 {
-	if h.used == h.allocd {
-		new_bvs := make([]bin, h.allocd+defaultHistSize)
-		if idx > 0 {
-			copy(new_bvs[0:], h.bvs[0:idx])
-		}
-		if idx < h.used {
-			copy(new_bvs[idx+1:], h.bvs[idx:])
-		}
-		h.allocd = h.allocd + defaultHistSize
-		h.bvs = new_bvs
-	} else {
-		copy(h.bvs[idx+1:], h.bvs[idx:h.used])
-	}
+	h.bvs = append(h.bvs, bin{})
+	copy(h.bvs[idx+1:], h.bvs[idx:])
 	h.bvs[idx].val = hb.val
 	h.bvs[idx].exp = hb.exp
 	h.bvs[idx].count = uint64(count)
@@ -651,6 +674,9 @@ func (h *Histogram) insertNewBinAt(idx uint16, hb *bin, count int64) uint64 {
 }
 
 func (h *Histogram) updateFast(start uint16) {
+	if !h.useLookup {
+		return
+	}
 	for i := start; i < h.used; i++ {
 		f2 := h.bvs[i].newFastL2()
 		if h.lookup[f2.l1] == nil {
@@ -876,7 +902,6 @@ func (h *Histogram) Copy() *Histogram {
 	}
 
 	newhist := New()
-	newhist.allocd = h.allocd
 	newhist.used = h.used
 	newhist.useLocks = h.useLocks
 
@@ -885,9 +910,13 @@ func (h *Histogram) Copy() *Histogram {
 		newhist.bvs = append(newhist.bvs, v)
 	}
 
-	for i, u := range h.lookup {
-		for _, v := range u {
-			newhist.lookup[i] = append(newhist.lookup[i], v)
+	newhist.useLookup = h.useLookup
+	if h.useLookup {
+		newhist.lookup = make([][]uint16, 256)
+		for i, u := range h.lookup {
+			for _, v := range u {
+				newhist.lookup[i] = append(newhist.lookup[i], v)
+			}
 		}
 	}
 
@@ -901,10 +930,11 @@ func (h *Histogram) FullReset() {
 		defer h.mutex.Unlock()
 	}
 
-	h.allocd = defaultHistSize
-	h.bvs = make([]bin, defaultHistSize)
+	h.bvs = []bin{}
 	h.used = 0
-	h.lookup = [256][]uint16{}
+	if h.useLookup {
+		h.lookup = make([][]uint16, 256)
+	}
 }
 
 // CopyAndReset creates and returns an exact copy of a histogram,
@@ -968,6 +998,12 @@ func stringsToBin(strs []string) ([]bin, error) {
 
 // UnmarshalJSON - histogram will come in a base64 encoded serialized form
 func (h *Histogram) UnmarshalJSON(b []byte) error {
+	return UnmarshalJSONWithOptions(h, b)
+}
+
+// UnmarshalJSONWithOptions unmarshals the byte data into the parent histogram,
+// using the provided Options to create the output Histogram
+func UnmarshalJSONWithOptions(parent *Histogram, b []byte, options ...Option) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
@@ -978,16 +1014,30 @@ func (h *Histogram) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	hNew, err := Deserialize(bytes.NewBuffer(data))
+	hNew, err := DeserializeWithOptions(bytes.NewBuffer(data), options...)
 	if err != nil {
 		return err
 	}
 
-	h.Merge(hNew)
+	// Go's JSON package will create a new Histogram to deserialize into by
+	// reflection, so all fields will have their zero values. Some of the
+	// default Histogram fields are not the zero values, so we can set them
+	// by proxy from the new histogram that's been created from deserialization.
+	parent.useLocks = hNew.useLocks
+	parent.useLookup = hNew.useLookup
+	if parent.useLookup {
+		parent.lookup = make([][]uint16, 256)
+	}
+
+	parent.Merge(hNew)
 	return nil
 }
 
 func (h *Histogram) MarshalJSON() ([]byte, error) {
+	return MarshalJSON(h)
+}
+
+func MarshalJSON(h *Histogram) ([]byte, error) {
 	buf := bytes.NewBuffer([]byte{})
 	err := h.SerializeB64(buf)
 	if err != nil {
@@ -1036,4 +1086,59 @@ func (h *Histogram) Merge(o *Histogram) {
 
 	// rebuild all the fast lookup table
 	h.updateFast(0)
+}
+
+// HistogramWithoutLookups holds a Histogram that's not configured to use
+// a lookup table. This type is useful to round-trip serialize the underlying
+// data while never allocating memory for the lookup table.
+// The main Histogram type must use lookups by default to be compatible with
+// the circllhist implementation of other languages. Furthermore, it is not
+// possible to encode the lookup table preference into the serialized form,
+// as that's again defined across languages. Therefore, the most straightforward
+// manner by which a user can deserialize histogram data while not allocating
+// lookup tables is by using a dedicated type in their structures describing
+// on-disk forms.
+// This structure can divulge the underlying Histogram, optionally allocating
+// the lookup tables first.
+type HistogramWithoutLookups struct {
+	histogram *Histogram
+}
+
+// NewHistogramWithoutLookups creates a new container for a Histogram without
+// lookup tables.
+func NewHistogramWithoutLookups(histogram *Histogram) *HistogramWithoutLookups {
+	histogram.useLookup = false
+	histogram.lookup = nil
+	return &HistogramWithoutLookups{
+		histogram: histogram,
+	}
+}
+
+// Histogram divulges the underlying Histogram that was deserialized. This
+// Histogram will not have lookup tables allocated.
+func (h *HistogramWithoutLookups) Histogram() *Histogram {
+	return h.histogram
+}
+
+// HistogramWithLookups allocates lookup tables in the underlying Histogram that was
+// deserialized, then divulges it.
+func (h *HistogramWithoutLookups) HistogramWithLookups() *Histogram {
+	h.histogram.useLookup = true
+	h.histogram.lookup = make([][]uint16, 256)
+	return h.histogram
+}
+
+// UnmarshalJSON unmarshals a histogram from a base64 encoded serialized form
+func (h *HistogramWithoutLookups) UnmarshalJSON(b []byte) error {
+	var histogram Histogram
+	if err := UnmarshalJSONWithOptions(&histogram, b, NoLookup()); err != nil {
+		return err
+	}
+	h.histogram = &histogram
+	return nil
+}
+
+// MarshalJSON marshals a histogram to a base64 encoded serialized form
+func (h *HistogramWithoutLookups) MarshalJSON() ([]byte, error) {
+	return MarshalJSON(h.histogram)
 }

@@ -235,7 +235,6 @@ func (h1 *bin) compare(h2 *bin) int {
 type Histogram struct {
 	bvs    []bin
 	used   uint16
-	allocd uint16
 
 	lookup    [][]uint16
 	useLookup bool
@@ -463,7 +462,6 @@ func New(options ...Option) *Histogram {
 		opt(&o)
 	}
 	h := &Histogram{
-		allocd:    o.Size,
 		used:      0,
 		bvs:       make([]bin, o.Size),
 		useLocks:  o.UseLocks,
@@ -494,7 +492,6 @@ func NewFromStrings(strs []string, locks bool) (*Histogram, error) {
 // NewFromBins returns a Histogram created from a bins struct slice
 func newFromBins(bins []bin, locks bool) *Histogram {
 	return &Histogram{
-		allocd:   uint16(len(bins) + 10), // pad it with 10
 		used:     uint16(len(bins)),
 		bvs:      bins,
 		useLocks: locks,
@@ -667,19 +664,8 @@ func (h *Histogram) insertBin(hb *bin, count int64) uint64 {
 }
 
 func (h *Histogram) insertNewBinAt(idx uint16, hb *bin, count int64) uint64 {
-	if h.used == h.allocd {
-		new_bvs := make([]bin, h.allocd+defaultHistSize)
-		if idx > 0 {
-			copy(new_bvs[0:], h.bvs[0:idx])
-		}
-		if idx < h.used {
-			copy(new_bvs[idx+1:], h.bvs[idx:])
-		}
-		h.allocd = h.allocd + defaultHistSize
-		h.bvs = new_bvs
-	} else {
-		copy(h.bvs[idx+1:], h.bvs[idx:h.used])
-	}
+	h.bvs = append(h.bvs, bin{})
+	copy(h.bvs[idx+1:], h.bvs[idx:])
 	h.bvs[idx].val = hb.val
 	h.bvs[idx].exp = hb.exp
 	h.bvs[idx].count = uint64(count)
@@ -916,7 +902,6 @@ func (h *Histogram) Copy() *Histogram {
 	}
 
 	newhist := New()
-	newhist.allocd = h.allocd
 	newhist.used = h.used
 	newhist.useLocks = h.useLocks
 
@@ -945,8 +930,7 @@ func (h *Histogram) FullReset() {
 		defer h.mutex.Unlock()
 	}
 
-	h.allocd = defaultHistSize
-	h.bvs = make([]bin, defaultHistSize)
+	h.bvs = []bin{}
 	h.used = 0
 	if h.useLookup {
 		h.lookup = make([][]uint16, 256)

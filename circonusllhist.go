@@ -351,13 +351,18 @@ func readBin(in io.Reader) (out bin, err error) {
 }
 
 func Deserialize(in io.Reader) (h *Histogram, err error) {
+	return DeserializeWithOptions(in)
+}
+
+func DeserializeWithOptions(in io.Reader, options ...Option) (h *Histogram, err error) {
 	var nbin int16
 	err = binary.Read(in, binary.BigEndian, &nbin)
 	if err != nil {
 		return
 	}
 
-	h = New(Size(uint16(nbin)))
+	options = append(options, Size(uint16(nbin)))
+	h = New(options...)
 	for ii := int16(0); ii < nbin; ii++ {
 		bb, err := readBin(in)
 		if err != nil {
@@ -1009,6 +1014,12 @@ func stringsToBin(strs []string) ([]bin, error) {
 
 // UnmarshalJSON - histogram will come in a base64 encoded serialized form
 func (h *Histogram) UnmarshalJSON(b []byte) error {
+	return UnmarshalJSONWithOptions(h, b)
+}
+
+// UnmarshalJSONWithOptions unmarshals the byte data into the parent histogram,
+// using the provided Options to create the output Histogram
+func UnmarshalJSONWithOptions(parent *Histogram, b []byte, options ...Option) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
@@ -1019,16 +1030,30 @@ func (h *Histogram) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	hNew, err := Deserialize(bytes.NewBuffer(data))
+	hNew, err := DeserializeWithOptions(bytes.NewBuffer(data), options...)
 	if err != nil {
 		return err
 	}
 
-	h.Merge(hNew)
+	// Go's JSON package will create a new Histogram to deserialize into by
+	// reflection, so all fields will have their zero values. Some of the
+	// default Histogram fields are not the zero values, so we can set them
+	// by proxy from the new histogram that's been created from deserialization.
+	parent.useLocks = hNew.useLocks
+	parent.useLookup = hNew.useLookup
+	if parent.useLookup {
+		parent.lookup = make([][]uint16, 256)
+	}
+
+	parent.Merge(hNew)
 	return nil
 }
 
 func (h *Histogram) MarshalJSON() ([]byte, error) {
+	return MarshalJSON(h)
+}
+
+func MarshalJSON(h *Histogram) ([]byte, error) {
 	buf := bytes.NewBuffer([]byte{})
 	err := h.SerializeB64(buf)
 	if err != nil {
@@ -1077,4 +1102,59 @@ func (h *Histogram) Merge(o *Histogram) {
 
 	// rebuild all the fast lookup table
 	h.updateFast(0)
+}
+
+// HistogramWithoutLookups holds a Histogram that's not configured to use
+// a lookup table. This type is useful to round-trip serialize the underlying
+// data while never allocating memory for the lookup table.
+// The main Histogram type must use lookups by default to be compatible with
+// the circllhist implementation of other languages. Furthermore, it is not
+// possible to encode the lookup table preference into the serialized form,
+// as that's again defined across languages. Therefore, the most straightforward
+// manner by which a user can deserialize histogram data while not allocating
+// lookup tables is by using a dedicated type in their structures describing
+// on-disk forms.
+// This structure can divulge the underlying Histogram, optionally allocating
+// the lookup tables first.
+type HistogramWithoutLookups struct {
+	histogram *Histogram
+}
+
+// NewHistogramWithoutLookups creates a new container for a Histogram without
+// lookup tables.
+func NewHistogramWithoutLookups(histogram *Histogram) *HistogramWithoutLookups {
+	histogram.useLookup = false
+	histogram.lookup = nil
+	return &HistogramWithoutLookups{
+		histogram: histogram,
+	}
+}
+
+// Histogram divulges the underlying Histogram that was deserialized. This
+// Histogram will not have lookup tables allocated.
+func (h *HistogramWithoutLookups) Histogram() *Histogram {
+	return h.histogram
+}
+
+// HistogramWithLookups allocates lookup tables in the underlying Histogram that was
+// deserialized, then divulges it.
+func (h *HistogramWithoutLookups) HistogramWithLookups() *Histogram {
+	h.histogram.useLookup = true
+	h.histogram.lookup = make([][]uint16, 256)
+	return h.histogram
+}
+
+// UnmarshalJSON unmarshals a histogram from a base64 encoded serialized form
+func (h *HistogramWithoutLookups) UnmarshalJSON(b []byte) error {
+	var histogram Histogram
+	if err := UnmarshalJSONWithOptions(&histogram, b, NoLookup()); err != nil {
+		return err
+	}
+	h.histogram = &histogram
+	return nil
+}
+
+// MarshalJSON marshals a histogram to a base64 encoded serialized form
+func (h *HistogramWithoutLookups) MarshalJSON() ([]byte, error) {
+	return MarshalJSON(h.histogram)
 }

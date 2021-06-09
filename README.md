@@ -2,7 +2,8 @@
 
 A golang implementation of the OpenHistogram [libcircllhist](https://github.com/openhistogram/libcircllhist) library.
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/openhistogram/circonusllhist.svg)](https://pkg.go.dev/github.com/openhistogram/circonusllhist)
+[![godocs.io](http://godocs.io/github.com/openhistogram/circonusllhist?status.svg)](http://godocs.io/github.com/openhistogram/circonusllhist)
+<!-- [![Go Reference](https://pkg.go.dev/badge/github.com/openhistogram/circonusllhist.svg)](https://pkg.go.dev/github.com/openhistogram/circonusllhist) -->
 
 ## Overview
 

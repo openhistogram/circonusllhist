@@ -9,7 +9,7 @@ import (
 	hist "github.com/openhistogram/circonusllhist"
 )
 
-func fuzzy_equals(expected, actual float64) bool {
+func fuzzyEquals(expected, actual float64) bool {
 	delta := math.Abs(expected / 100000.0)
 	if actual >= expected-delta && actual <= expected+delta {
 		return true
@@ -22,7 +22,7 @@ var s1 = []float64{0.123, 0, 0.43, 0.41, 0.415, 0.2201, 0.3201, 0.125, 0.13}
 func TestDecStrings(t *testing.T) {
 	h := hist.New()
 	for _, sample := range s1 {
-		h.RecordValue(sample)
+		_ = h.RecordValue(sample)
 	}
 	out := h.DecStrings()
 	expect := []string{"H[0.0e+00]=1", "H[1.2e-01]=2", "H[1.3e-01]=1",
@@ -65,10 +65,10 @@ func TestNewFromStrings(t *testing.T) {
 func TestMean(t *testing.T) {
 	h := hist.New()
 	for _, sample := range s1 {
-		h.RecordValue(sample)
+		_ = h.RecordValue(sample)
 	}
 	mean := h.ApproxMean()
-	if !fuzzy_equals(0.2444444444, mean) {
+	if !fuzzyEquals(0.2444444444, mean) {
 		t.Errorf("mean() -> %v != %v", mean, 0.24444)
 	}
 }
@@ -76,14 +76,14 @@ func TestMean(t *testing.T) {
 func helpQTest(t *testing.T, vals, qin, qexpect []float64) {
 	h := hist.New()
 	for _, sample := range vals {
-		h.RecordValue(sample)
+		_ = h.RecordValue(sample)
 	}
 	qout, _ := h.ApproxQuantile(qin)
 	if len(qout) != len(qexpect) {
 		t.Errorf("wrong number of quantiles")
 	}
 	for i, q := range qout {
-		if !fuzzy_equals(qexpect[i], q) {
+		if !fuzzyEquals(qexpect[i], q) {
 			t.Errorf("q(%v) -> %v != %v", qin[i], q, qexpect[i])
 		}
 	}
@@ -102,7 +102,7 @@ func TestQuantiles(t *testing.T) {
 func BenchmarkHistogramRecordValue(b *testing.B) {
 	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
-		h.RecordValue(float64(i % 1000))
+		_ = h.RecordValue(float64(i % 1000))
 	}
 	b.ReportAllocs()
 }
@@ -110,7 +110,7 @@ func BenchmarkHistogramRecordValue(b *testing.B) {
 func BenchmarkHistogramTypical(b *testing.B) {
 	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
-		h.RecordValue(float64(i % 1000))
+		_ = h.RecordValue(float64(i % 1000))
 	}
 	b.ReportAllocs()
 }
@@ -118,7 +118,7 @@ func BenchmarkHistogramTypical(b *testing.B) {
 func BenchmarkHistogramRecordIntScale(b *testing.B) {
 	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
-		h.RecordIntScale(int64(i%90+10), (i/1000)%3)
+		_ = h.RecordIntScale(int64(i%90+10), (i/1000)%3)
 	}
 	b.ReportAllocs()
 }
@@ -126,7 +126,7 @@ func BenchmarkHistogramRecordIntScale(b *testing.B) {
 func BenchmarkHistogramTypicalIntScale(b *testing.B) {
 	h := hist.New(hist.NoLocks())
 	for i := 0; i < b.N; i++ {
-		h.RecordIntScale(int64(i%90+10), (i/1000)%3)
+		_ = h.RecordIntScale(int64(i%90+10), (i/1000)%3)
 	}
 	b.ReportAllocs()
 }
@@ -146,24 +146,24 @@ func TestCompare(t *testing.T) {
 func TestConcurrent(t *testing.T) {
 	h := hist.New()
 	for r := 0; r < 100; r++ {
-		go func() {
+		go func(t *testing.T) {
 			for j := 0; j < 100; j++ {
 				for i := 50; i < 100; i++ {
 					if err := h.RecordValue(float64(i)); err != nil {
-						t.Fatal(err)
+						t.Error(err)
+						return
 					}
 				}
 			}
-		}()
+		}(t)
 	}
 }
 
 func TestRang(t *testing.T) {
 	h1 := hist.New()
-	src := rand.NewSource(time.Now().UnixNano())
-	rnd := rand.New(src)
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < 1000000; i++ {
-		h1.RecordValue(rnd.Float64() * 10)
+		_ = h1.RecordValue(rnd.Float64() * 10)
 	}
 }
 
@@ -300,16 +300,16 @@ func TestMerge(t *testing.T) {
 
 func BenchmarkHistogramMerge(b *testing.B) {
 	b.Run("random", func(b *testing.B) {
-		rand.Seed(time.Now().UnixNano())
+		rand.New(rand.NewSource(time.Now().UnixNano()))
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			h1 := hist.New()
 			for i := 0; i < 500; i++ {
-				h1.RecordIntScale(rand.Int63n(1000), 0)
+				_ = h1.RecordIntScale(rand.Int63n(1000), 0)
 			}
 			h2 := hist.New()
 			for i := 0; i < 500; i++ {
-				h2.RecordIntScale(rand.Int63n(1000), 0)
+				_ = h2.RecordIntScale(rand.Int63n(1000), 0)
 			}
 			h1.Merge(h2)
 		}
@@ -319,11 +319,11 @@ func BenchmarkHistogramMerge(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			h1 := hist.New()
-			h1.RecordIntScale(1, 0)
-			h1.RecordIntScale(1000, 0)
+			_ = h1.RecordIntScale(1, 0)
+			_ = h1.RecordIntScale(1000, 0)
 			h2 := hist.New()
 			for i := 10; i < 1000; i++ {
-				h2.RecordIntScale(int64(i), 0)
+				_ = h2.RecordIntScale(int64(i), 0)
 			}
 			h1.Merge(h2)
 		}

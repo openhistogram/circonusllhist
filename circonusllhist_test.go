@@ -19,7 +19,7 @@ func TestCreate(t *testing.T) {
 			h.RecordIntScale(rand.Intn(1000), 0)
 		}
 	*/
-	h.RecordIntScales(99, 0, int64(rand.Intn(2))+1)
+	_ = h.RecordIntScales(99, 0, int64(rand.Intn(2))+1)
 	buf := bytes.NewBuffer([]byte{})
 	if err := h.Serialize(buf); err != nil {
 		t.Error(err)
@@ -30,7 +30,7 @@ func TestCreate(t *testing.T) {
 	}
 	for j := uint16(0); j < h2.used; j++ {
 		if h2.bvs[j].exp < 1 && (h2.bvs[j].val%10) != 0 {
-			t.Error(fmt.Errorf("bad bin[%v] %ve%v", j, float64(h2.bvs[j].val)/10.0, h2.bvs[j].exp))
+			t.Errorf("bad bin[%v] %ve%v", j, float64(h2.bvs[j].val)/10.0, h2.bvs[j].exp)
 		}
 	}
 }
@@ -46,7 +46,7 @@ func TestSerialize(t *testing.T) {
 	}
 
 	buf := bytes.NewBuffer([]byte{})
-	if err := h.Serialize(buf); err != nil {
+	if err = h.Serialize(buf); err != nil {
 		t.Error(err)
 	}
 
@@ -130,7 +130,7 @@ func helpTestBin(t *testing.T, v float64, val, exp int8) {
 	}
 }
 
-func fuzzy_equals(expected, actual float64) bool {
+func fuzzyEquals(expected, actual float64) bool {
 	delta := math.Abs(expected / 100000.0)
 	if actual >= expected-delta && actual <= expected+delta {
 		return true
@@ -160,13 +160,13 @@ func TestBins(t *testing.T) {
 	helpTestBin(t, 9.999e127, 99, 127)
 
 	h := New()
-	h.RecordIntScale(100, 0)
+	_ = h.RecordIntScale(100, 0)
 	if h.bvs[0].val != 10 || h.bvs[0].exp != 2 {
 		t.Errorf("100 not added correctly")
 	}
 
 	h = New()
-	h.RecordValue(100.0)
+	_ = h.RecordValue(100.0)
 	if h.bvs[0].val != 10 || h.bvs[0].exp != 2 {
 		t.Errorf("100.0 not added correctly")
 	}
@@ -207,10 +207,7 @@ func TestRecordDuration(t *testing.T) {
 
 	fuzzyEquals := func(expected, actual time.Duration) bool {
 		diff := math.Abs(float64(expected) - float64(actual))
-		if (diff / math.Max(float64(expected), float64(actual))) > 0.05 {
-			return false
-		}
-		return true
+		return (diff / math.Max(float64(expected), float64(actual))) <= 0.05
 	}
 
 	for n, test := range tests {
@@ -218,7 +215,7 @@ func TestRecordDuration(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
 			h := New()
 			for _, dur := range test.input {
-				h.RecordDuration(dur)
+				_ = h.RecordDuration(dur)
 			}
 
 			if v := time.Duration(1000000000.0 * h.ApproxSum()); !fuzzyEquals(v, test.approxSum) {
@@ -239,10 +236,10 @@ func helpTestVB(t *testing.T, v, b, w float64) {
 	if out < 0 {
 		interval *= -1.0
 	}
-	if !fuzzy_equals(b, out) {
+	if !fuzzyEquals(b, out) {
 		t.Errorf("%v -> %v != %v\n", v, out, b)
 	}
-	if !fuzzy_equals(w, interval) {
+	if !fuzzyEquals(w, interval) {
 		t.Errorf("%v -> [%v] != [%v]\n", v, interval, w)
 	}
 }
@@ -261,23 +258,24 @@ func TestBinSizes(t *testing.T) {
 	helpTestVB(t, -987324, -980000, -10000)
 }
 
-// preloadedTester knows how to preload values, then use them to benchmark a histogram
+// preloadedTester knows how to preload values, then use them to benchmark a histogram.
 type preloadedTester interface {
 	preload(n int)
 	run(histogram *Histogram) error
 }
 
-// intScale knows how to benchmark RecordIntScale
+// intScale knows how to benchmark RecordIntScale.
 type intScale struct {
+	// integers hold the integers we will feed RecordIntScale
+	integers []int64
+
+	// scales hold the scales we will feed RecordIntScale
+	scales []int
+
 	// scale is the scale of the distribution of values - this allows the benchmark
 	// to tease apart differences in the usage of a histogram in different applications
 	// where it may be storing fairly homogenous values or any value whatsoever
 	scale int
-
-	// integers hold the integers we will feed RecordIntScale
-	integers []int64
-	// scales hold the scales we will feed RecordIntScale
-	scales []int
 
 	n int
 }
@@ -296,19 +294,19 @@ func (t *intScale) preload(n int) {
 
 func (t *intScale) run(histogram *Histogram) error {
 	n := t.n
-	t.n += 1
+	t.n++
 	return histogram.RecordIntScale(t.integers[n], t.scales[n])
 }
 
-// value knows how to benchmark RecordValue
+// value knows how to benchmark RecordValue.
 type value struct {
+	// values hold the integers we will feed RecordValue
+	values []float64
+
 	// stddev is the standard deviation of the distribution of values - this allows the
 	// benchmark to tease apart differences in the usage of a histogram in different
 	// applications where it may be storing fairly homogenous values or any value whatsoever
 	stddev float64
-
-	// values hold the integers we will feed RecordValue
-	values []float64
 
 	n int
 }
@@ -325,7 +323,7 @@ func (t *value) preload(n int) {
 
 func (t *value) run(histogram *Histogram) error {
 	n := t.n
-	t.n += 1
+	t.n++
 	return histogram.RecordValue(t.values[n])
 }
 
@@ -389,8 +387,8 @@ func TestCustomRoundTripping(t *testing.T) {
 		t.Fatalf("histogram without lookups serialized into something different than default: expected %v, got %v", defaultBytes, withoutLookupBytes)
 	}
 
-	for source, data := range map[string][]byte {
-		"default": defaultBytes,
+	for source, data := range map[string][]byte{
+		"default":        defaultBytes,
 		"withoutLookups": withoutLookupBytes,
 	} {
 		var deserializedWithoutLookups HistogramWithoutLookups

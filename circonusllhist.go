@@ -11,7 +11,6 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -70,9 +69,9 @@ func newBinRaw(val int8, exp int8, count uint64) *bin {
 	}
 }
 
-func newBin() *bin {
-	return newBinRaw(0, 0, 0)
-}
+// func newBin() *bin {
+// 	return newBinRaw(0, 0, 0)
+// }
 
 func newBinFromFloat64(d float64) *bin {
 	hb := newBinRaw(0, 0, 0)
@@ -88,7 +87,7 @@ func (hb *bin) newFastL2() fastL2 {
 	return fastL2{l1: int(uint8(hb.exp)), l2: int(uint8(hb.val))}
 }
 
-func (hb *bin) setFromFloat64(d float64) *bin {
+func (hb *bin) setFromFloat64(d float64) *bin { //nolint:unparam
 	hb.val = -1
 	if math.IsInf(d, 0) || math.IsNaN(d) {
 		return hb
@@ -102,21 +101,21 @@ func (hb *bin) setFromFloat64(d float64) *bin {
 		sign = -1
 	}
 	d = math.Abs(d)
-	big_exp := int(math.Floor(math.Log10(d)))
-	hb.exp = int8(big_exp)
-	if int(hb.exp) != big_exp { //rolled
+	bigExp := int(math.Floor(math.Log10(d)))
+	hb.exp = int8(bigExp)
+	if int(hb.exp) != bigExp { // rolled
 		hb.exp = 0
-		if big_exp < 0 {
+		if bigExp < 0 {
 			hb.val = 0
 		}
 		return hb
 	}
-	d = d / hb.powerOfTen()
-	d = d * 10
+	d /= hb.powerOfTen()
+	d *= 10
 	hb.val = int8(sign * int(math.Floor(d+1e-13)))
 	if hb.val == 100 || hb.val == -100 {
 		if hb.exp < 127 {
-			hb.val = hb.val / 10
+			hb.val /= 10
 			hb.exp++
 		} else {
 			hb.val = 0
@@ -191,7 +190,7 @@ func (hb *bin) midpoint() float64 {
 	}
 	interval := hb.binWidth()
 	if out < 0 {
-		interval = interval * -1
+		interval *= -1
 	}
 	return out + interval/2.0
 }
@@ -207,42 +206,41 @@ func (hb *bin) left() float64 {
 	return out - hb.binWidth()
 }
 
-func (h1 *bin) compare(h2 *bin) int {
+func (hb *bin) compare(h2 *bin) int {
 	var v1, v2 int
 
 	// 1) slide exp positive
 	// 2) shift by size of val multiple by (val != 0)
 	// 3) then add or subtract val accordingly
 
-	if h1.val >= 0 {
-		v1 = ((int(h1.exp)+256)<<8)*int(((int(h1.val)|(^int(h1.val)+1))>>8)&1) + int(h1.val)
+	if hb.val >= 0 {
+		v1 = ((int(hb.exp)+256)<<8)*(((int(hb.val)|(^int(hb.val)+1))>>8)&1) + int(hb.val)
 	} else {
-		v1 = ((int(h1.exp)+256)<<8)*int(((int(h1.val)|(^int(h1.val)+1))>>8)&1) - int(h1.val)
+		v1 = ((int(hb.exp)+256)<<8)*(((int(hb.val)|(^int(hb.val)+1))>>8)&1) - int(hb.val)
 	}
 
 	if h2.val >= 0 {
-		v2 = ((int(h2.exp)+256)<<8)*int(((int(h2.val)|(^int(h2.val)+1))>>8)&1) + int(h2.val)
+		v2 = ((int(h2.exp)+256)<<8)*(((int(h2.val)|(^int(h2.val)+1))>>8)&1) + int(h2.val)
 	} else {
-		v2 = ((int(h2.exp)+256)<<8)*int(((int(h2.val)|(^int(h2.val)+1))>>8)&1) - int(h2.val)
+		v2 = ((int(h2.exp)+256)<<8)*(((int(h2.val)|(^int(h2.val)+1))>>8)&1) - int(h2.val)
 	}
 
 	// return the difference
 	return v2 - v1
 }
 
-// This histogram structure tracks values are two decimal digits of precision
-// with a bounded error that remains bounded upon composition
+// Histogram tracks values are two decimal digits of precision
+// with a bounded error that remains bounded upon composition.
 type Histogram struct {
-	bvs    []bin
-	used   uint16
-
+	bvs       []bin
 	lookup    [][]uint16
+	mutex     sync.RWMutex
+	used      uint16
 	useLookup bool
-
-	mutex    sync.RWMutex
-	useLocks bool
+	useLocks  bool
 }
 
+//nolint:golint,revive
 const (
 	BVL1, BVL1MASK uint64 = iota, 0xff << (8 * iota)
 	BVL2, BVL2MASK
@@ -254,7 +252,7 @@ const (
 	BVL8, BVL8MASK
 )
 
-func getBytesRequired(val uint64) (len int8) {
+func getBytesRequired(val uint64) int8 {
 	if 0 != (BVL8MASK|BVL7MASK|BVL6MASK|BVL5MASK)&val {
 		if 0 != BVL8MASK&val {
 			return int8(BVL8)
@@ -304,7 +302,7 @@ func writeBin(out io.Writer, in bin) (err error) {
 	var bcount = make([]uint8, 8)
 	b := bcount[0 : tgtType+1]
 	for i := tgtType; i >= 0; i-- {
-		b[i] = uint8(uint64(in.count>>(uint8(i)*8)) & 0xff)
+		b[i] = uint8(uint64(in.count>>(uint8(i)*8)) & 0xff) //nolint:unconvert
 	}
 
 	err = binary.Write(out, binary.BigEndian, b)
@@ -314,39 +312,41 @@ func writeBin(out io.Writer, in bin) (err error) {
 	return
 }
 
-func readBin(in io.Reader) (out bin, err error) {
-	err = binary.Read(in, binary.BigEndian, &out.val)
+func readBin(in io.Reader) (bin, error) {
+	var out bin
+
+	err := binary.Read(in, binary.BigEndian, &out.val)
 	if err != nil {
-		return
+		return out, fmt.Errorf("read: %w", err)
 	}
 
 	err = binary.Read(in, binary.BigEndian, &out.exp)
 	if err != nil {
-		return
+		return out, fmt.Errorf("read: %w", err)
 	}
 	var bvl uint8
 	err = binary.Read(in, binary.BigEndian, &bvl)
 	if err != nil {
-		return
+		return out, fmt.Errorf("read: %w", err)
 	}
 	if bvl > uint8(BVL8) {
-		return out, errors.New("encoding error: bvl value is greater than max allowable")
+		return out, fmt.Errorf("encoding error: bvl value is greater than max allowable") //nolint:goerr113
 	}
 
 	bcount := make([]byte, 8)
 	b := bcount[0 : bvl+1]
 	err = binary.Read(in, binary.BigEndian, b)
 	if err != nil {
-		return
+		return out, fmt.Errorf("read: %w", err)
 	}
 
-	var count uint64 = 0
+	count := uint64(0)
 	for i := int(bvl + 1); i >= 0; i-- {
 		count |= uint64(bcount[i]) << (uint8(i) * 8)
 	}
 
 	out.count = count
-	return
+	return out, nil
 }
 
 func Deserialize(in io.Reader) (h *Histogram, err error) {
@@ -376,12 +376,12 @@ func (h *Histogram) Serialize(w io.Writer) error {
 	var nbin int16
 	for i := range h.bvs {
 		if h.bvs[i].count != 0 {
-			nbin += 1
+			nbin++
 		}
 	}
 
 	if err := binary.Write(w, binary.BigEndian, nbin); err != nil {
-		return err
+		return fmt.Errorf("write: %w", err)
 	}
 
 	for _, bv := range h.bvs {
@@ -402,13 +402,16 @@ func (h *Histogram) SerializeB64(w io.Writer) error {
 
 	encoder := base64.NewEncoder(base64.StdEncoding, w)
 	if _, err := encoder.Write(buf.Bytes()); err != nil {
-		return err
+		return fmt.Errorf("b64 encode write: %w", err)
+	}
+	if err := encoder.Close(); err != nil {
+		return fmt.Errorf("b64 encoder close: %w", err)
 	}
 
-	return encoder.Close()
+	return nil
 }
 
-// Options are exposed options for initializing a histogram
+// Options are exposed options for initializing a histogram.
 type Options struct {
 	// Size is the number of bins.
 	Size uint16
@@ -420,10 +423,10 @@ type Options struct {
 	UseLookup bool
 }
 
-// Option knows how to mutate the Options to change initialization
+// Option knows how to mutate the Options to change initialization.
 type Option func(*Options)
 
-// NoLocks configures a histogram to not use locks
+// NoLocks configures a histogram to not use locks.
 func NoLocks() Option {
 	return func(options *Options) {
 		options.UseLocks = false
@@ -454,8 +457,8 @@ func Size(size uint16) Option {
 // New returns a new Histogram, respecting the passed Options.
 func New(options ...Option) *Histogram {
 	o := Options{
-		Size:     defaultHistSize,
-		UseLocks: true,
+		Size:      defaultHistSize,
+		UseLocks:  true,
 		UseLookup: true,
 	}
 	for _, opt := range options {
@@ -473,12 +476,13 @@ func New(options ...Option) *Histogram {
 	return h
 }
 
-// Deprecated: use New(NoLocks()) instead
+// NewNoLocks returns a new histogram not using locks.
+// Deprecated: use New(NoLocks()) instead.
 func NewNoLocks() *Histogram {
 	return New(NoLocks())
 }
 
-// NewFromStrings returns a Histogram created from DecStrings strings
+// NewFromStrings returns a Histogram created from DecStrings strings.
 func NewFromStrings(strs []string, locks bool) (*Histogram, error) {
 
 	bin, err := stringsToBin(strs)
@@ -489,13 +493,13 @@ func NewFromStrings(strs []string, locks bool) (*Histogram, error) {
 	return newFromBins(bin, locks), nil
 }
 
-// NewFromBins returns a Histogram created from a bins struct slice
+// NewFromBins returns a Histogram created from a bins struct slice.
 func newFromBins(bins []bin, locks bool) *Histogram {
 	return &Histogram{
-		used:     uint16(len(bins)),
-		bvs:      bins,
-		useLocks: locks,
-		lookup: make([][]uint16, 256),
+		used:      uint16(len(bins)),
+		bvs:       bins,
+		useLocks:  locks,
+		lookup:    make([][]uint16, 256),
 		useLookup: true,
 	}
 }
@@ -515,7 +519,7 @@ func (h *Histogram) Mean() float64 {
 	return h.ApproxMean()
 }
 
-//Count returns the number of recorded values.
+// Count returns the number of recorded values.
 func (h *Histogram) Count() uint64 {
 	if h.useLocks {
 		h.mutex.RLock()
@@ -531,7 +535,7 @@ func (h *Histogram) Count() uint64 {
 	return count
 }
 
-//BinCount returns the number of used bins.
+// BinCount returns the number of used bins.
 func (h *Histogram) BinCount() uint64 {
 	if h.useLocks {
 		h.mutex.RLock()
@@ -541,7 +545,7 @@ func (h *Histogram) BinCount() uint64 {
 	return uint64(binCount)
 }
 
-// Reset forgets all bins in the histogram (they remain allocated)
+// Reset forgets all bins in the histogram (they remain allocated).
 func (h *Histogram) Reset() {
 	if h.useLocks {
 		h.mutex.Lock()
@@ -584,7 +588,7 @@ func (h *Histogram) RecordDuration(v time.Duration) error {
 // at an expected interval (e.g., doing jitter analysis). Processes which are
 // recording ad-hoc values (e.g., latency for incoming requests) can't take
 // advantage of this.
-// CH Compat
+// CH Compat.
 func (h *Histogram) RecordCorrectedValue(v, expectedInterval int64) error {
 	if err := h.RecordValue(float64(v)); err != nil {
 		return err
@@ -605,7 +609,7 @@ func (h *Histogram) RecordCorrectedValue(v, expectedInterval int64) error {
 	return nil
 }
 
-// find where a new bin should go
+// find where a new bin should go.
 func (h *Histogram) internalFind(hb *bin) (bool, uint16) {
 	if h.used == 0 {
 		return false, 0
@@ -625,12 +629,13 @@ func (h *Histogram) internalFind(hb *bin) (bool, uint16) {
 	for l < r {
 		check := (r + l) / 2
 		rv = h.bvs[check].compare(hb)
-		if rv == 0 {
+		switch {
+		case rv == 0:
 			l = check
 			r = check
-		} else if rv > 0 {
+		case rv > 0:
 			l = check + 1
-		} else {
+		default:
 			r = check - 1
 		}
 	}
@@ -648,7 +653,7 @@ func (h *Histogram) internalFind(hb *bin) (bool, uint16) {
 	return false, idx
 }
 
-func (h *Histogram) insertBin(hb *bin, count int64) uint64 {
+func (h *Histogram) insertBin(hb *bin, count int64) uint64 { //nolint:unparam
 	if h.useLocks {
 		h.mutex.Lock()
 		defer h.mutex.Unlock()
@@ -660,7 +665,7 @@ func (h *Histogram) insertBin(hb *bin, count int64) uint64 {
 		h.updateFast(idx)
 		return count
 	}
-	return h.updateOldBinAt(idx, hb, count)
+	return h.updateOldBinAt(idx, count)
 }
 
 func (h *Histogram) insertNewBinAt(idx uint16, hb *bin, count int64) uint64 {
@@ -682,18 +687,18 @@ func (h *Histogram) updateFast(start uint16) {
 		if h.lookup[f2.l1] == nil {
 			h.lookup[f2.l1] = make([]uint16, 256)
 		}
-		h.lookup[f2.l1][f2.l2] = uint16(i) + 1
+		h.lookup[f2.l1][f2.l2] = i + 1
 	}
 }
 
-func (h *Histogram) updateOldBinAt(idx uint16, hb *bin, count int64) uint64 {
+func (h *Histogram) updateOldBinAt(idx uint16, count int64) uint64 {
 	var newval uint64
 	if count >= 0 {
 		newval = h.bvs[idx].count + uint64(count)
 	} else {
 		newval = h.bvs[idx].count - uint64(-count)
 	}
-	if newval < h.bvs[idx].count { //rolled
+	if newval < h.bvs[idx].count { // rolled
 		newval = ^uint64(0)
 	}
 	h.bvs[idx].count = newval
@@ -714,7 +719,7 @@ func (h *Histogram) RecordIntScales(val int64, scale int, n int64) error {
 		}
 		if val < 10 {
 			val *= 10
-			scale -= 1
+			scale--
 		}
 		for val >= 100 {
 			val /= 10
@@ -743,7 +748,7 @@ func (h *Histogram) RecordValues(v float64, n int64) error {
 	return nil
 }
 
-// Approximate mean
+// ApproxMean returns an approximate mean.
 func (h *Histogram) ApproxMean() float64 {
 	if h.useLocks {
 		h.mutex.RLock()
@@ -763,7 +768,7 @@ func (h *Histogram) ApproxMean() float64 {
 	return sum / divisor
 }
 
-// Approximate sum
+// ApproxSum returns an approximate sum.
 func (h *Histogram) ApproxSum() float64 {
 	if h.useLocks {
 		h.mutex.RLock()
@@ -778,71 +783,72 @@ func (h *Histogram) ApproxSum() float64 {
 	return sum
 }
 
-func (h *Histogram) ApproxQuantile(q_in []float64) ([]float64, error) {
+func (h *Histogram) ApproxQuantile(qIn []float64) ([]float64, error) {
 	if h.useLocks {
 		h.mutex.RLock()
 		defer h.mutex.RUnlock()
 	}
-	q_out := make([]float64, len(q_in))
-	i_q, i_b := 0, uint16(0)
-	total_cnt, bin_width, bin_left, lower_cnt, upper_cnt := 0.0, 0.0, 0.0, 0.0, 0.0
-	if len(q_in) == 0 {
-		return q_out, nil
+	qOut := make([]float64, len(qIn))
+	iq, ib := 0, uint16(0)
+	totalCnt, binWidth, binLeft, lowerCnt, upperCnt := 0.0, 0.0, 0.0, 0.0, 0.0
+	if len(qIn) == 0 {
+		return qOut, nil
 	}
 	// Make sure the requested quantiles are in order
-	for i_q = 1; i_q < len(q_in); i_q++ {
-		if q_in[i_q-1] > q_in[i_q] {
-			return nil, errors.New("out of order")
+	for iq = 1; iq < len(qIn); iq++ {
+		if qIn[iq-1] > qIn[iq] {
+			return nil, fmt.Errorf("out of order") //nolint:goerr113
 		}
 	}
 	// Add up the bins
-	for i_b = 0; i_b < h.used; i_b++ {
-		if !h.bvs[i_b].isNaN() {
-			total_cnt += float64(h.bvs[i_b].count)
+	for ib = 0; ib < h.used; ib++ {
+		if !h.bvs[ib].isNaN() {
+			totalCnt += float64(h.bvs[ib].count)
 		}
 	}
-	if total_cnt == 0.0 {
-		return nil, errors.New("empty_histogram")
+	if totalCnt == 0.0 {
+		return nil, fmt.Errorf("empty_histogram") //nolint:goerr113
 	}
 
-	for i_q = 0; i_q < len(q_in); i_q++ {
-		if q_in[i_q] < 0.0 || q_in[i_q] > 1.0 {
-			return nil, errors.New("out of bound quantile")
+	for iq = 0; iq < len(qIn); iq++ {
+		if qIn[iq] < 0.0 || qIn[iq] > 1.0 {
+			return nil, fmt.Errorf("out of bound quantile") //nolint:goerr113
 		}
-		q_out[i_q] = total_cnt * q_in[i_q]
+		qOut[iq] = totalCnt * qIn[iq]
 	}
 
-	for i_b = 0; i_b < h.used; i_b++ {
-		if h.bvs[i_b].isNaN() {
+	for ib = 0; ib < h.used; ib++ {
+		if h.bvs[ib].isNaN() {
 			continue
 		}
-		bin_width = h.bvs[i_b].binWidth()
-		bin_left = h.bvs[i_b].left()
-		lower_cnt = upper_cnt
-		upper_cnt = lower_cnt + float64(h.bvs[i_b].count)
+		binWidth = h.bvs[ib].binWidth()
+		binLeft = h.bvs[ib].left()
+		lowerCnt = upperCnt
+		upperCnt = lowerCnt + float64(h.bvs[ib].count)
 		break
 	}
-	for i_q = 0; i_q < len(q_in); i_q++ {
-		for i_b < (h.used-1) && upper_cnt < q_out[i_q] {
-			i_b++
-			bin_width = h.bvs[i_b].binWidth()
-			bin_left = h.bvs[i_b].left()
-			lower_cnt = upper_cnt
-			upper_cnt = lower_cnt + float64(h.bvs[i_b].count)
+	for iq = 0; iq < len(qIn); iq++ {
+		for ib < (h.used-1) && upperCnt < qOut[iq] {
+			ib++
+			binWidth = h.bvs[ib].binWidth()
+			binLeft = h.bvs[ib].left()
+			lowerCnt = upperCnt
+			upperCnt = lowerCnt + float64(h.bvs[ib].count)
 		}
-		if lower_cnt == q_out[i_q] {
-			q_out[i_q] = bin_left
-		} else if upper_cnt == q_out[i_q] {
-			q_out[i_q] = bin_left + bin_width
-		} else {
-			if bin_width == 0 {
-				q_out[i_q] = bin_left
+		switch {
+		case lowerCnt == qOut[iq]:
+			qOut[iq] = binLeft
+		case upperCnt == qOut[iq]:
+			qOut[iq] = binLeft + binWidth
+		default:
+			if binWidth == 0 {
+				qOut[iq] = binLeft
 			} else {
-				q_out[i_q] = bin_left + (q_out[i_q]-lower_cnt)/(upper_cnt-lower_cnt)*bin_width
+				qOut[iq] = binLeft + (qOut[iq]-lowerCnt)/(upperCnt-lowerCnt)*binWidth
 			}
 		}
 	}
-	return q_out, nil
+	return qOut, nil
 }
 
 // ValueAtQuantile returns the recorded value at the given quantile (0..1).
@@ -851,18 +857,18 @@ func (h *Histogram) ValueAtQuantile(q float64) float64 {
 		h.mutex.RLock()
 		defer h.mutex.RUnlock()
 	}
-	q_in := make([]float64, 1)
-	q_in[0] = q
-	q_out, err := h.ApproxQuantile(q_in)
-	if err == nil && len(q_out) == 1 {
-		return q_out[0]
+	qIn := make([]float64, 1)
+	qIn[0] = q
+	qOut, err := h.ApproxQuantile(qIn)
+	if err == nil && len(qOut) == 1 {
+		return qOut[0]
 	}
 	return math.NaN()
 }
 
 // SignificantFigures returns the significant figures used to create the
 // histogram
-// CH Compat
+// CH Compat.
 func (h *Histogram) SignificantFigures() int64 {
 	return 2
 }
@@ -905,18 +911,14 @@ func (h *Histogram) Copy() *Histogram {
 	newhist.used = h.used
 	newhist.useLocks = h.useLocks
 
-	newhist.bvs = []bin{}
-	for _, v := range h.bvs {
-		newhist.bvs = append(newhist.bvs, v)
-	}
+	newhist.bvs = make([]bin, len(h.bvs))
+	copy(h.bvs, newhist.bvs)
 
 	newhist.useLookup = h.useLookup
 	if h.useLookup {
 		newhist.lookup = make([][]uint16, 256)
 		for i, u := range h.lookup {
-			for _, v := range u {
-				newhist.lookup[i] = append(newhist.lookup[i], v)
-			}
+			newhist.lookup[i] = append(newhist.lookup[i], u...)
 		}
 	}
 
@@ -962,7 +964,7 @@ func (h *Histogram) DecStrings() []string {
 	return out
 }
 
-// takes the output of DecStrings and deserializes it into a Bin struct slice
+// takes the output of DecStrings and deserializes it into a Bin struct slice.
 func stringsToBin(strs []string) ([]bin, error) {
 
 	bins := make([]bin, len(strs))
@@ -974,21 +976,21 @@ func stringsToBin(strs []string) ([]bin, error) {
 		countString := strings.Split(str, "=")[1]
 		countInt, err := strconv.ParseInt(countString, 10, 64)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse int: %w", err)
 		}
 
 		// H[ <0.0> e+00]=1
 		valString := strings.Split(strings.Split(strings.Split(str, "=")[0], "e")[0], "[")[1]
 		valInt, err := strconv.ParseFloat(valString, 64)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse float: %w", err)
 		}
 
 		// H[0.0e <+00> ]=1
 		expString := strings.Split(strings.Split(strings.Split(str, "=")[0], "e")[1], "]")[0]
 		expInt, err := strconv.ParseInt(expString, 10, 8)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse int: %w", err)
 		}
 		bins[i] = *newBinRaw(int8(valInt*10), int8(expInt), uint64(countInt))
 	}
@@ -996,22 +998,22 @@ func stringsToBin(strs []string) ([]bin, error) {
 	return bins, nil
 }
 
-// UnmarshalJSON - histogram will come in a base64 encoded serialized form
+// UnmarshalJSON - histogram will come in a base64 encoded serialized form.
 func (h *Histogram) UnmarshalJSON(b []byte) error {
 	return UnmarshalJSONWithOptions(h, b)
 }
 
 // UnmarshalJSONWithOptions unmarshals the byte data into the parent histogram,
-// using the provided Options to create the output Histogram
+// using the provided Options to create the output Histogram.
 func UnmarshalJSONWithOptions(parent *Histogram, b []byte, options ...Option) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
-		return err
+		return fmt.Errorf("json unmarshal: %w", err)
 	}
 
 	data, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		return err
+		return fmt.Errorf("b64 decode: %w", err)
 	}
 
 	hNew, err := DeserializeWithOptions(bytes.NewBuffer(data), options...)
@@ -1043,7 +1045,11 @@ func MarshalJSON(h *Histogram) ([]byte, error) {
 	if err != nil {
 		return buf.Bytes(), err
 	}
-	return json.Marshal(buf.String())
+	data, err := json.Marshal(buf.String())
+	if err != nil {
+		return nil, fmt.Errorf("json marshal: %w", err)
+	}
+	return data, nil
 }
 
 // Merge merges all bins from another histogram.
@@ -1073,7 +1079,7 @@ func (h *Histogram) Merge(o *Histogram) {
 		j++
 		switch {
 		case diff == 0:
-			h.updateOldBinAt(i, b, int64(b.count))
+			h.updateOldBinAt(i, int64(b.count))
 		case diff < 0:
 			h.insertNewBinAt(i, b, int64(b.count))
 		}
@@ -1128,7 +1134,7 @@ func (h *HistogramWithoutLookups) HistogramWithLookups() *Histogram {
 	return h.histogram
 }
 
-// UnmarshalJSON unmarshals a histogram from a base64 encoded serialized form
+// UnmarshalJSON unmarshals a histogram from a base64 encoded serialized form.
 func (h *HistogramWithoutLookups) UnmarshalJSON(b []byte) error {
 	var histogram Histogram
 	if err := UnmarshalJSONWithOptions(&histogram, b, NoLookup()); err != nil {
@@ -1138,7 +1144,7 @@ func (h *HistogramWithoutLookups) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// MarshalJSON marshals a histogram to a base64 encoded serialized form
+// MarshalJSON marshals a histogram to a base64 encoded serialized form.
 func (h *HistogramWithoutLookups) MarshalJSON() ([]byte, error) {
 	return MarshalJSON(h.histogram)
 }

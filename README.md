@@ -13,11 +13,9 @@ Package `circllhist` provides an implementation of OpenHistogram's fixed log-lin
 
 [Apache 2.0](LICENSE)
 
-<!--
 ## Documentation
 
 More complete docs can be found at [pkg.go.dev](https://pkg.go.dev/github.com/openhistogram/circonusllhist)
--->
 
 ## Usage Example
 

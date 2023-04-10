@@ -15,7 +15,7 @@ Package `circllhist` provides an implementation of OpenHistogram's fixed log-lin
 
 ## Documentation
 
-More complete docs can be found at [pkg.go.dev](https://pkg.go.dev/github.com/openhistogram/circonusllhist)
+More complete docs can be found at [godoc](https://godocs.io/github.com/openhistogram/circonusllhist) or [pkg.go.dev](https://pkg.go.dev/github.com/openhistogram/circonusllhist)
 
 ## Usage Example
 

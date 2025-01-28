@@ -912,7 +912,7 @@ func (h *Histogram) Copy() *Histogram {
 	newhist.useLocks = h.useLocks
 
 	newhist.bvs = make([]bin, len(h.bvs))
-	copy(h.bvs, newhist.bvs)
+	copy(newhist.bvs, h.bvs)
 
 	newhist.useLookup = h.useLookup
 	if h.useLookup {
